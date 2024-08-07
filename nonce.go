@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 )
 
+//go:generate mockery --name NonceGetter --structname NonceGetterMock --inpackage --testonly
+
 // NonceGetter represents a source of random nonces to go into resulting objects.
 type NonceGetter interface {
 	GetNonce(ctx context.Context) (string, error)
@@ -14,6 +16,8 @@ type NonceGetter interface {
 type NonceGetterFunc func(ctx context.Context) (string, error)
 
 func (ng NonceGetterFunc) GetNonce(ctx context.Context) (string, error) { return ng(ctx) }
+
+//go:generate mockery --name NonceChecker --structname NonceCheckerMock --inpackage --testonly
 
 // NonceChecker is responsible for the verification of the nonce received in a signature, e.g. to prevent replay attacks,
 // or to verify that the nonce is the expected one, like if requested using the Accept-Signature header.
