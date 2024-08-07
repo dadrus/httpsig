@@ -1,0 +1,73 @@
+# Options for analysis running.
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable-all: true
+  disable:
+    - dupl
+    - wrapcheck
+    - ireturn
+    - exhaustruct
+    - testpackage
+    - paralleltest
+    - nolintlint
+    - tparallel
+    - depguard
+    - zerologlint
+    # depricated
+    - gomnd
+    - execinquery
+
+issues:
+  exclude-rules:
+    - path: '(.+)_test\.go'
+      linters:
+        - funlen
+        - maintidx
+        - cyclop
+        - gocognit
+        - err113
+        - lll
+        - errcheck
+        - canonicalheader
+        - mnd
+        - varnamelen
+        - forcetypeassert
+        - exhaustive
+
+linters-settings:
+  exhaustive:
+    ignore-enum-members: "POT.+"
+    default-signifies-exhaustive: true
+  gci:
+    sections:
+      - standard # Captures all standard packages if they do not match another section.
+      - default # Contains all imports that could not be matched to another section type.
+      - prefix(github.com/dadrus/heimdall) # Groups all imports with the specified Prefix.
+  varnamelen:
+    min-name-length: 2
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+    ignore-decls:
+      - t testing.T
+      - i int
+      - T any
+      - m map[string]int
+      - w http.ResponseWriter
+      - r *http.Request
+  goconst:
+    ignore-tests: true
+  cyclop:
+    max-complexity: 11
+  funlen:
+    lines: 80
+  mnd:
+    ignored-functions:
+      - '^make'
+      - '^math\.'
+      - '^time\.*'
