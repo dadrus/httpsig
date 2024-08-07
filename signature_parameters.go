@@ -172,17 +172,22 @@ func (p *signatureParameters) toSignatureBase(msg *Message) ([]byte, error) {
 //nolint:cyclop
 func (p *signatureParameters) assert(
 	msg *Message,
+	reqCreatedTS, reqExpiredTS bool,
 	keyAlg SignatureAlgorithm,
-	params []SignatureParameter,
 	identifiers []*componentIdentifier,
 	tolerance time.Duration,
 	maxAge time.Duration,
 	checker NonceChecker,
 ) error {
-	if nonce, present := p.Params.Get(string(Nonce)); present {
-		if err := checker.CheckNonce(msg.Context, nonce.(string)); err != nil { //nolint: forcetypeassert
-			return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
-		}
+	var nonce string
+
+	nonceValue, noncePresent := p.Params.Get(string(Nonce))
+	if noncePresent {
+		nonce = nonceValue.(string) //nolint: forcetypeassert
+	}
+
+	if err := checker.CheckNonce(msg.Context, nonce); err != nil {
+		return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
 	}
 
 	if len(p.alg) != 0 && p.alg != keyAlg {
@@ -192,32 +197,29 @@ func (p *signatureParameters) assert(
 
 	now := currentTime().UTC()
 
-	if !p.expires.Equal(time.Time{}) && now.After(p.expires.Add(tolerance)) {
+	if p.expires.Equal(time.Time{}) {
+		if reqExpiredTS {
+			return fmt.Errorf("%w: expected expires parameter not preset", ErrValidity)
+		}
+	} else if now.After(p.expires.Add(tolerance)) {
 		return fmt.Errorf("%w: signature expired", ErrValidity)
 	}
 
-	if !p.created.Equal(time.Time{}) && now.Before(p.created.Add(-1*tolerance)) {
-		return fmt.Errorf("%w: signature not yet valid", ErrValidity)
-	}
+	if p.created.Equal(time.Time{}) {
+		if reqCreatedTS {
+			return fmt.Errorf("%w: expected created parameter not preset", ErrValidity)
+		}
+	} else {
+		if now.Before(p.created.Add(-1 * tolerance)) {
+			return fmt.Errorf("%w: signature not yet valid", ErrValidity)
+		}
 
-	if !p.created.Equal(time.Time{}) && p.created.Add(maxAge).Before(now) {
-		return fmt.Errorf("%w: signature too old", ErrValidity)
-	}
-
-	var (
-		missingParams     []string
-		missingComponents []string
-	)
-
-	for _, param := range params {
-		if _, present := p.Params.Get(string(param)); !present {
-			missingParams = append(missingParams, string(param))
+		if p.created.Add(maxAge).Before(now) {
+			return fmt.Errorf("%w: signature too old", ErrValidity)
 		}
 	}
 
-	if len(missingParams) > 0 {
-		return fmt.Errorf("%w: missing parameters: %s", ErrParameter, strings.Join(missingParams, ", "))
-	}
+	var missingComponents []string
 
 	for _, expIdentifier := range identifiers {
 		var found bool

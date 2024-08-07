@@ -26,8 +26,7 @@ var (
 )
 
 type NoApplicableSignatureError struct {
-	requiredSignatureParameters string
-	wantContentDigest           bool
+	headerToAdd http.Header
 }
 
 func (e *NoApplicableSignatureError) Error() string { return "no applicable signature found" }
@@ -39,13 +38,10 @@ func (e *NoApplicableSignatureError) Is(err error) bool {
 }
 
 func (e *NoApplicableSignatureError) Negotiate(header http.Header) {
-	if len(e.requiredSignatureParameters) != 0 {
-		header.Add(headerAcceptSignature, e.requiredSignatureParameters)
-	}
-
-	if e.wantContentDigest {
-		header.Add(headerWantContentDigest, "sha-512=2")
-		header.Add(headerWantContentDigest, "sha-256=1")
+	for name, values := range e.headerToAdd {
+		for _, value := range values {
+			header.Add(name, value)
+		}
 	}
 }
 

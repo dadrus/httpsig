@@ -543,7 +543,6 @@ func TestSignatureParametersAssert(t *testing.T) {
 		validityTolerance time.Duration
 		validityMaxAge    time.Duration
 		expAlg            SignatureAlgorithm
-		expParams         []SignatureParameter
 		expIdentifiers    []string
 		configure         func(t *testing.T, nc *NonceCheckerMock)
 		assert            func(t *testing.T, err error)
@@ -581,8 +580,12 @@ func TestSignatureParametersAssert(t *testing.T) {
 					return params
 				}(),
 			},
-			expAlg:    EcdsaP256Sha256,
-			configure: func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			expAlg: EcdsaP256Sha256,
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -601,7 +604,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 					return params
 				}(),
 			},
-			configure: func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -621,7 +628,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 				}(),
 			},
 			validityTolerance: 3 * time.Second,
-			configure:         func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -639,7 +650,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 				}(),
 			},
 			validityTolerance: 2 * time.Second,
-			configure:         func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -656,7 +671,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 					return params
 				}(),
 			},
-			configure: func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -676,7 +695,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 				}(),
 			},
 			validityTolerance: 3 * time.Second,
-			configure:         func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -694,7 +717,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 				}(),
 			},
 			validityMaxAge: 30 * time.Second,
-			configure:      func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -711,7 +738,11 @@ func TestSignatureParametersAssert(t *testing.T) {
 					return params
 				}(),
 			},
-			configure: func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -721,23 +752,14 @@ func TestSignatureParametersAssert(t *testing.T) {
 			},
 		},
 		{
-			uc:        "expected parameter missing",
-			params:    httpsfv.InnerList{Params: httpsfv.NewParams()},
-			expParams: []SignatureParameter{Alg, Expires},
-			configure: func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrParameter)
-				require.ErrorContains(t, err, "alg, expires")
-			},
-		},
-		{
 			uc:             "expected component identifier missing",
 			params:         httpsfv.InnerList{Params: httpsfv.NewParams()},
 			expIdentifiers: []string{"@method;req", "@authority"},
-			configure:      func(t *testing.T, _ *NonceCheckerMock) { t.Helper() },
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -766,7 +788,6 @@ func TestSignatureParametersAssert(t *testing.T) {
 				},
 			},
 			expIdentifiers: []string{"@authority", "@method"},
-			expParams:      []SignatureParameter{Created, Expires, Alg, KeyID, Nonce, Tag},
 			expAlg:         EcdsaP256Sha256,
 			validityMaxAge: 5 * time.Second,
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
@@ -795,7 +816,7 @@ func TestSignatureParametersAssert(t *testing.T) {
 			nc := NewNonceCheckerMock(t)
 			tc.configure(t, nc)
 
-			err = params.assert(msg, tc.expAlg, tc.expParams, expIdentifiers, tc.validityTolerance, tc.validityMaxAge, nc)
+			err = params.assert(msg, false, false, tc.expAlg, expIdentifiers, tc.validityTolerance, tc.validityMaxAge, nc)
 
 			tc.assert(t, err)
 		})
