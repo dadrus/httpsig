@@ -8,24 +8,19 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-type AcceptedSignatureOption func(*AcceptedSignatureBuilder) error
+type AcceptSignatureOption func(*AcceptSignatureBuilder) error
 
-func WithExpectedKey(key Key) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
-		if len(key.KeyID) != 0 {
-			asb.keyID = key.KeyID
-		}
-
-		if len(key.Algorithm) != 0 {
-			asb.keyAlgorithm = key.Algorithm
-		}
+func WithExpectedKey(key Key) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
+		asb.keyID = key.KeyID
+		asb.keyAlgorithm = key.Algorithm
 
 		return nil
 	}
 }
 
-func WithExpectedNonce(ng NonceGetter) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
+func WithExpectedNonce(ng NonceGetter) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
 		if ng != nil {
 			asb.nonceGetter = ng
 		}
@@ -34,16 +29,18 @@ func WithExpectedNonce(ng NonceGetter) AcceptedSignatureOption {
 	}
 }
 
-func WithExpectedLabel(label string) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
-		asb.label = label
+func WithExpectedLabel(label string) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
+		if len(label) != 0 {
+			asb.label = label
+		}
 
 		return nil
 	}
 }
 
-func WithExpectedComponents(identifiers ...string) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
+func WithExpectedComponents(identifiers ...string) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
 		var err error
 
 		asb.identifiers, err = toComponentIdentifiers(identifiers)
@@ -60,36 +57,46 @@ func WithExpectedComponents(identifiers ...string) AcceptedSignatureOption {
 	}
 }
 
-func WithContentDigestAlgorithmPreferences(prefs ...AlgorithmPreference) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
-		if len(prefs) != 0 {
-			asb.cdAlgPrefs = prefs
+func WithContentDigestAlgorithmPreferences(prefs ...AlgorithmPreference) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
+		if len(prefs) == 0 {
+			return nil
 		}
+
+		algPrefs := make([]string, len(prefs))
+
+		for i, pref := range prefs {
+			if pref.Algorithm == "" {
+				return fmt.Errorf("%w: digest algorithm preference requires a non-empty algorithm", ErrParameter)
+			}
+
+			algPrefs[i] = pref.String()
+		}
+
+		asb.cdAlgPrefs = algPrefs
 
 		return nil
 	}
 }
 
-func WithExpectedTag(tag string) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
-		if len(tag) != 0 {
-			asb.tag = tag
-		}
+func WithExpectedTag(tag string) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
+		asb.tag = tag
 
 		return nil
 	}
 }
 
-func WithExpectedCreatedTimestamp(flag bool) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
+func WithExpectedCreatedTimestamp(flag bool) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
 		asb.addCreatedTS = flag
 
 		return nil
 	}
 }
 
-func WithExpectedExpiresTimestamp(flag bool) AcceptedSignatureOption {
-	return func(asb *AcceptedSignatureBuilder) error {
+func WithExpectedExpiresTimestamp(flag bool) AcceptSignatureOption {
+	return func(asb *AcceptSignatureBuilder) error {
 		asb.addExpiresTS = flag
 
 		return nil
@@ -105,20 +112,20 @@ func (p AlgorithmPreference) String() string {
 	return fmt.Sprintf("%s=%d", p.Algorithm, p.Preference)
 }
 
-type AcceptedSignatureBuilder struct {
+type AcceptSignatureBuilder struct {
 	keyAlgorithm      SignatureAlgorithm
 	keyID             string
 	nonceGetter       NonceGetter
 	label             string
 	identifiers       []*componentIdentifier
-	cdAlgPrefs        []AlgorithmPreference
+	cdAlgPrefs        []string
 	tag               string
 	addCreatedTS      bool
 	addExpiresTS      bool
 	wantContentDigest bool
 }
 
-func (asb *AcceptedSignatureBuilder) Build(ctx context.Context, header http.Header) error {
+func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header) error {
 	nonce, err := asb.nonceGetter.GetNonce(ctx)
 	if err != nil {
 		return err
@@ -145,22 +152,22 @@ func (asb *AcceptedSignatureBuilder) Build(ctx context.Context, header http.Head
 
 	if asb.wantContentDigest {
 		for _, pref := range asb.cdAlgPrefs {
-			header.Add(headerWantContentDigest, pref.String())
+			header.Add(headerWantContentDigest, pref)
 		}
 	}
 
 	return nil
 }
 
-func NewAcceptedSignature(opts ...AcceptedSignatureOption) (*AcceptedSignatureBuilder, error) {
-	asb := &AcceptedSignatureBuilder{
+func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder, error) {
+	asb := &AcceptSignatureBuilder{
 		addCreatedTS: true,
 		addExpiresTS: true,
 		nonceGetter:  nonceGetter{},
 		label:        "sig",
-		cdAlgPrefs: []AlgorithmPreference{
-			{Algorithm: Sha256, Preference: 5},
-			{Algorithm: Sha512, Preference: 10},
+		cdAlgPrefs: []string{
+			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),
+			AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(),
 		},
 	}
 
