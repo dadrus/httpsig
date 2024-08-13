@@ -3,7 +3,6 @@ package httpsig
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/dunglas/httpsfv"
@@ -169,80 +168,14 @@ func (p *signatureParameters) toSignatureBase(msg *Message) ([]byte, error) {
 	return []byte(base), nil
 }
 
-//nolint:cyclop
-func (p *signatureParameters) assert(
-	msg *Message,
-	reqCreatedTS, reqExpiredTS bool,
-	keyAlg SignatureAlgorithm,
-	identifiers []*componentIdentifier,
-	tolerance time.Duration,
-	maxAge time.Duration,
-	checker NonceChecker,
-) error {
-	var nonce string
+func (p *signatureParameters) hasIdentifier(id *componentIdentifier) bool {
+	for _, identifier := range p.identifiers {
+		if identifier.Item.Value == id.Item.Value &&
+			slices.Equal(identifier.Params.Names(), id.Params.Names()) {
 
-	nonceValue, noncePresent := p.Params.Get(string(Nonce))
-	if noncePresent {
-		nonce = nonceValue.(string) //nolint: forcetypeassert
-	}
-
-	if err := checker.CheckNonce(msg.Context, nonce); err != nil {
-		return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
-	}
-
-	if len(p.alg) != 0 && p.alg != keyAlg {
-		return fmt.Errorf("%w: key algorithm %s does not match signature algorithm %s",
-			ErrParameter, p.alg, keyAlg)
-	}
-
-	now := currentTime().UTC()
-
-	if p.expires.Equal(time.Time{}) {
-		if reqExpiredTS {
-			return fmt.Errorf("%w: expected expires parameter not preset", ErrValidity)
-		}
-	} else if now.After(p.expires.Add(tolerance)) {
-		return fmt.Errorf("%w: signature expired", ErrValidity)
-	}
-
-	if p.created.Equal(time.Time{}) {
-		if reqCreatedTS {
-			return fmt.Errorf("%w: expected created parameter not preset", ErrValidity)
-		}
-	} else {
-		if now.Before(p.created.Add(-1 * tolerance)) {
-			return fmt.Errorf("%w: signature not yet valid", ErrValidity)
-		}
-
-		if p.created.Add(maxAge).Before(now) {
-			return fmt.Errorf("%w: signature too old", ErrValidity)
+			return true
 		}
 	}
 
-	var missingComponents []string
-
-	for _, expIdentifier := range identifiers {
-		var found bool
-
-		for _, identifier := range p.identifiers {
-			if identifier.Item.Value == expIdentifier.Item.Value &&
-				slices.Equal(identifier.Params.Names(), expIdentifier.Params.Names()) {
-				found = true
-
-				break
-			}
-		}
-
-		if !found {
-			res, _ := httpsfv.Marshal(expIdentifier)
-			missingComponents = append(missingComponents, res)
-		}
-	}
-
-	if len(missingComponents) > 0 {
-		return fmt.Errorf("%w: missing component identifiers: %s",
-			ErrParameter, strings.Join(missingComponents, ", "))
-	}
-
-	return nil
+	return false
 }

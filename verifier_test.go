@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dunglas/httpsfv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -65,6 +66,384 @@ func TestNewPayloadVerifier(t *testing.T) {
 				require.NotNil(t, sig)
 				require.IsType(t, tc.typ, sig)
 			}
+		})
+	}
+}
+
+func TestExpectationsAssertParameters(t *testing.T) {
+	now := time.Now().UTC()
+	falseVal := false
+	trueVal := true
+
+	for _, tc := range []struct {
+		uc        string
+		params    httpsfv.InnerList
+		exp       expectations
+		expAlg    SignatureAlgorithm
+		configure func(t *testing.T, nc *NonceCheckerMock)
+		assert    func(t *testing.T, err error)
+	}{
+		{
+			uc: "replay attack",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Nonce), "test")
+
+					return params
+				}(),
+			},
+			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "test").Return(errors.New("test error"))
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "nonce validation failed")
+			},
+		},
+		{
+			uc: "signature algorithm mismatch",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Alg), string(RsaPssSha512))
+
+					return params
+				}(),
+			},
+			expAlg: EcdsaP256Sha256,
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "key algorithm rsa-pss-sha512 does not match signature algorithm ecdsa-p256-sha256")
+			},
+		},
+		{
+			uc: "signature expired, no tolerance specified",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Expires), now.Add(-2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrValidity)
+				require.ErrorContains(t, err, "expired")
+			},
+		},
+		{
+			uc: "signature is still valid with specified tolerance",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Expires), now.Add(-2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{
+				tolerance:    3 * time.Second,
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				mv:           noopMessageVerifier{},
+			},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "signature is valid if expires in the future",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Expires), now.Add(2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{
+				tolerance:    2 * time.Second,
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				mv:           noopMessageVerifier{},
+			},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "signature not yet valid, no tolerance specified",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrValidity)
+				require.ErrorContains(t, err, "not yet valid")
+			},
+		},
+		{
+			uc: "signature already valid with specified tolerance",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{
+				tolerance:    3 * time.Second,
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				mv:           noopMessageVerifier{},
+			},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "signature is valid if created in the past",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(-2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{
+				maxAge:       30 * time.Second,
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				mv:           noopMessageVerifier{},
+			},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "signature too old",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(-2*time.Second).Unix())
+
+					return params
+				}(),
+			},
+			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrValidity)
+				require.ErrorContains(t, err, "too old")
+			},
+		},
+		{
+			uc:     "expected component identifier missing",
+			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
+			exp: func() expectations {
+				ids, err := toComponentIdentifiers([]string{"@method;req", "@authority"})
+				require.NoError(t, err)
+
+				return expectations{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
+			}(),
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrMissingParameter)
+				require.ErrorContains(t, err, `"@method";req, "@authority"`)
+			},
+		},
+		{
+			uc:     "expected created parameter is missing",
+			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
+			exp:    expectations{reqCreatedTS: &trueVal, reqExpiresTS: &falseVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrMissingParameter)
+				require.ErrorContains(t, err, `created parameter`)
+			},
+		},
+		{
+			uc:     "expected expires parameter is missing",
+			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
+			exp:    expectations{reqCreatedTS: &falseVal, reqExpiresTS: &trueVal},
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrMissingParameter)
+				require.ErrorContains(t, err, `expires parameter`)
+			},
+		},
+		{
+			uc:     "message verifier fails",
+			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
+			exp: func() expectations {
+				mv := NewMessageVerifierMock(t)
+				mv.EXPECT().verify(mock.Anything).Return(errors.New("test error"))
+
+				return expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal, mv: mv}
+			}(),
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorContains(t, err, "test error")
+			},
+		},
+		{
+			uc: "successful assertion with all possible parameters",
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(-3*time.Second).Unix())
+					params.Add(string(Expires), now.Add(3*time.Second).Unix())
+					params.Add(string(Alg), string(EcdsaP256Sha256))
+					params.Add(string(KeyID), "test")
+					params.Add(string(Nonce), "foo")
+					params.Add(string(Tag), "test")
+
+					return params
+				}(),
+				Items: []httpsfv.Item{
+					httpsfv.NewItem("@method"),
+					httpsfv.NewItem("@authority"),
+				},
+			},
+			exp: func() expectations {
+				ids, err := toComponentIdentifiers([]string{"@authority", "@method"})
+				require.NoError(t, err)
+
+				return expectations{
+					identifiers: ids,
+					maxAge:      5 * time.Second,
+					mv:          noopMessageVerifier{},
+				}
+			}(),
+			expAlg: EcdsaP256Sha256,
+			configure: func(t *testing.T, nc *NonceCheckerMock) {
+				t.Helper()
+
+				nc.EXPECT().CheckNonce(mock.Anything, "foo").Return(nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+	} {
+		t.Run(tc.uc, func(t *testing.T) {
+			var params signatureParameters
+
+			msg := &Message{Context: context.TODO()}
+
+			err := params.fromInnerList(tc.params)
+			require.NoError(t, err)
+
+			nc := NewNonceCheckerMock(t)
+			tc.configure(t, nc)
+
+			err = tc.exp.assert(&params, msg, tc.expAlg, nc)
+
+			tc.assert(t, err)
 		})
 	}
 }
@@ -238,6 +617,15 @@ func TestWithRequiredTag(t *testing.T) {
 			tc.assert(t, err, v.tagExpectations["test"])
 		})
 	}
+
+	t.Run("with duplicate WithRequiredTag", func(t *testing.T) {
+		v := &verifier{tagExpectations: map[string]*expectations{"foo": {}}}
+
+		err := WithRequiredTag("foo", nil)(v, nil, false)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrParameter)
+		require.ErrorContains(t, err, "already configured")
+	})
 }
 
 func TestWithMaxAge(t *testing.T) {
@@ -263,6 +651,89 @@ func TestWithNonceChecker(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, storage, v.nonceChecker)
+}
+
+func TestWithSignatureNegotiation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		uc     string
+		opts   []SignatureNegotiationOption
+		assert func(t *testing.T, err error, asb *AcceptSignatureBuilder)
+	}{
+		{
+			uc: "without options",
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				require.NotNil(t, asb)
+				assert.IsType(t, nonceGetter{}, asb.nonceGetter)
+				assert.Equal(t, "sig", asb.label)
+				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
+				assert.Empty(t, asb.keyAlgorithm)
+				assert.Empty(t, asb.keyID)
+				// not set by any of the options
+				assert.True(t, asb.addCreatedTS)
+				assert.True(t, asb.addExpiresTS)
+				assert.False(t, asb.wantContentDigest)
+				assert.Empty(t, asb.tag)
+				assert.Empty(t, asb.identifiers)
+			},
+		},
+		{
+			uc: "with all possible options",
+			opts: []SignatureNegotiationOption{
+				WithRequestedLabel("foo"),
+				WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+				WithRequestedKey(Key{KeyID: "bar", Algorithm: RsaPssSha512}),
+				WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
+			},
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				require.NotNil(t, asb)
+				require.NotNil(t, asb.nonceGetter)
+				nonce, err := asb.nonceGetter.GetNonce(context.TODO())
+				require.NoError(t, err)
+				require.Equal(t, "abc", nonce)
+				assert.Equal(t, "foo", asb.label)
+				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-512=2"})
+				assert.Equal(t, RsaPssSha512, asb.keyAlgorithm)
+				assert.Equal(t, "bar", asb.keyID)
+				// not set by any of the options
+				assert.True(t, asb.addCreatedTS)
+				assert.True(t, asb.addExpiresTS)
+				assert.False(t, asb.wantContentDigest)
+				assert.Empty(t, asb.tag)
+				assert.Empty(t, asb.identifiers)
+			},
+		},
+		{
+			uc: "with error while applying the option",
+			opts: []SignatureNegotiationOption{
+				WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{}),
+			},
+			assert: func(t *testing.T, err error, _ *AcceptSignatureBuilder) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+	} {
+		t.Run(tc.uc, func(t *testing.T) {
+			v := &verifier{}
+			exp := &expectations{}
+
+			err := WithSignatureNegotiation(tc.opts...)(v, exp, false)
+
+			tc.assert(t, err, exp.asb)
+		})
+	}
 }
 
 func TestNewVerifier(t *testing.T) {
@@ -296,7 +767,7 @@ func TestNewVerifier(t *testing.T) {
 			},
 		},
 		{
-			uc:       "with option configuration error",
+			uc:       "with component identifiers configuration error",
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
 				WithRequiredComponents("@foo"),
@@ -307,6 +778,21 @@ func TestNewVerifier(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, ErrVerifierCreation)
 				require.ErrorContains(t, err, "unsupported component identifier: @foo")
+			},
+		},
+		{
+			uc:       "cannot verify and negotiate any possible signature",
+			resolver: &KeyResolverMock{},
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithSignatureNegotiation(),
+			},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorContains(t, err, "verification and negotiation")
 			},
 		},
 		{
@@ -351,7 +837,7 @@ func TestNewVerifier(t *testing.T) {
 			},
 		},
 		{
-			uc:       "with global defaults",
+			uc:       "with global defaults without signature negotiation",
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
 				WithRequiredTag("test"),
@@ -372,6 +858,46 @@ func TestNewVerifier(t *testing.T) {
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
 				assert.Equal(t, 1*time.Second, exp.tolerance)
+				assert.Nil(t, exp.asb)
+			},
+		},
+		{
+			uc:       "with global defaults with signature negotiation",
+			resolver: &KeyResolverMock{},
+			opts: []VerifierOption{
+				WithRequiredTag("test"),
+				WithValidityTolerance(1 * time.Second),
+				WithRequiredComponents("@status", "content-digest"),
+				WithSignatureNegotiation(
+					WithRequestedKey(Key{KeyID: "bar", Algorithm: RsaPssSha512}),
+				),
+			},
+			assert: func(t *testing.T, err error, v *verifier) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.False(t, v.validateAllSigs)
+				assert.IsType(t, &KeyResolverMock{}, v.keyResolver)
+				assert.Len(t, v.tagExpectations, 1)
+				assert.NotContains(t, v.tagExpectations, "")
+				require.Contains(t, v.tagExpectations, "test")
+
+				exp := v.tagExpectations["test"]
+				assert.Len(t, exp.identifiers, 2)
+				assert.Equal(t, "@status", exp.identifiers[0].Value)
+				assert.Equal(t, "content-digest", exp.identifiers[1].Value)
+				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.asb)
+				assert.IsType(t, nonceGetter{}, exp.asb.nonceGetter)
+				assert.Equal(t, "sig", exp.asb.label)
+				assert.ElementsMatch(t, exp.asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
+				assert.Equal(t, RsaPssSha512, exp.asb.keyAlgorithm)
+				assert.Equal(t, "bar", exp.asb.keyID)
+				assert.True(t, exp.asb.addCreatedTS)
+				assert.True(t, exp.asb.addExpiresTS)
+				assert.True(t, exp.asb.wantContentDigest)
+				assert.Equal(t, "test", exp.asb.tag)
+				assert.Equal(t, exp.identifiers, exp.asb.identifiers)
 			},
 		},
 		{
@@ -565,7 +1091,13 @@ func TestVerifierVerify(t *testing.T) {
 
 				require.Error(t, err)
 				require.ErrorIs(t, err, ErrVerificationFailed)
-				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+
+				var noSigErr *NoApplicableSignatureError
+				require.ErrorAs(t, err, &noSigErr)
+
+				hdr := make(http.Header)
+				noSigErr.Negotiate(hdr)
+				require.Empty(t, hdr)
 			},
 		},
 		{
@@ -688,14 +1220,15 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 		{
-			uc: "signature parameters negotiation",
+			uc: "signature parameters negotiation for not present tagged signature",
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithRequiredComponents("@method"),
-					WithSignatureNegotiationIfNotPresent(
-						WithExpectedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
-						WithExpectedLabel("bar"),
-						WithExpectedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+					WithRequiredComponents("@method", "content-digest"),
+					WithSignatureNegotiation(
+						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedLabel("bar"),
+						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
 					),
 				),
 			},
@@ -713,9 +1246,55 @@ func TestVerifierVerify(t *testing.T) {
 				hdr := make(http.Header)
 				targetErr.Negotiate(hdr)
 
+				require.Len(t, hdr, 2)
+				assert.Equal(t, `bar=("@method" "content-digest");created;expires;keyid="test-key";alg="rsa-pss-sha512";nonce="abc";tag="foo"`, hdr.Get("Accept-Signature"))
+				assert.ElementsMatch(t, hdr.Values("Want-Content-Digest"), []string{"sha-256=1"})
+			},
+		},
+		{
+			uc: "signature parameters negotiation for present signature with missing expires parameters",
+			opts: []VerifierOption{
+				WithRequiredTag("foo",
+					WithSignatureNegotiation(
+						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedLabel("bar"),
+						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
+					),
+				),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":            []string{"example.com"},
+					"Content-Length":  []string{"18"},
+					"Signature-Input": []string{`sig=();created=1618884473;keyid="test-key";nonce="abc";tag="foo"`},
+					"Signature":       []string{"sig=:dGVzdA==:"},
+				},
+				IsRequest: true,
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-key").Return(
+					Key{Key: tkRSAPSS, KeyID: "test-key", Algorithm: RsaPssSha512}, nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				var targetErr *NoApplicableSignatureError
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorAs(t, err, &targetErr)
+
+				hdr := make(http.Header)
+				targetErr.Negotiate(hdr)
+
 				require.Len(t, hdr, 1)
-				assert.Contains(t, hdr, "Accept-Signature")
-				assert.Equal(t, `bar=("@method");created;expires;keyid="test-key";alg="rsa-pss-sha512";nonce="abc";tag="foo"`, hdr.Get("Accept-Signature"))
+				assert.Equal(t, `bar=();created;expires;keyid="test-key";alg="rsa-pss-sha512";nonce="abc";tag="foo"`, hdr.Get("Accept-Signature"))
 			},
 		},
 		{
@@ -723,9 +1302,9 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithRequiredComponents("@method"),
-					WithSignatureNegotiationIfNotPresent(
-						WithExpectedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
-						WithExpectedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
+					WithSignatureNegotiation(
+						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
 					),
 				),
 			},
