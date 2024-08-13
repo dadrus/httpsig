@@ -166,6 +166,33 @@ func TestWithNonceGetter(t *testing.T) {
 	assert.Equal(t, "foo", nonce)
 }
 
+func TestWithContentDigestAlgorithm(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		uc  string
+		alg DigestAlgorithm
+		err error
+	}{
+		{uc: "valid algorithm", alg: Sha512},
+		{uc: "invalid algorithm", alg: DigestAlgorithm("md4"), err: ErrUnsupportedAlgorithm},
+	} {
+		t.Run(tc.uc, func(t *testing.T) {
+			s := &signer{}
+
+			err := WithContentDigestAlgorithm(tc.alg)(s)
+
+			if tc.err != nil {
+				require.Error(t, err)
+				require.ErrorIs(t, err, tc.err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.alg, s.cdAlg)
+			}
+		})
+	}
+}
+
 func TestNewSigner(t *testing.T) {
 	t.Parallel()
 
@@ -327,10 +354,36 @@ func TestSignerSign(t *testing.T) {
 					"Host":           []string{"example.com"},
 					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
 					"Content-Type":   []string{"application/json"},
-					"Content-Digest": []string{"sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:"},
 					"Content-Length": []string{"18"},
 				},
 				IsRequest: true,
+			},
+			assert: func(t *testing.T, err error, _ http.Header) {
+				t.Helper()
+
+				require.Error(t, err)
+			},
+		},
+		{
+			uc:  "failed updating message (adding content-digest)",
+			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			opts: []SignerOption{
+				WithComponents("content-digest"),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":           []string{"example.com"},
+					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+					"Content-Type":   []string{"application/json"},
+					"Content-Length": []string{"18"},
+				},
+				IsRequest: true,
+				Body: func() (io.ReadCloser, error) {
+					return nil, errors.New("test error")
+				},
 			},
 			assert: func(t *testing.T, err error, _ http.Header) {
 				t.Helper()
@@ -352,7 +405,6 @@ func TestSignerSign(t *testing.T) {
 					"Host":           []string{"example.com"},
 					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
 					"Content-Type":   []string{"application/json"},
-					"Content-Digest": []string{"sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:"},
 					"Content-Length": []string{"18"},
 				},
 				IsRequest: true,
