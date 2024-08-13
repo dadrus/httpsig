@@ -169,7 +169,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				tolerance:    3 * time.Second,
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
-				mv:           noopMessageVerifier{},
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -196,7 +195,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				tolerance:    2 * time.Second,
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
-				mv:           noopMessageVerifier{},
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -247,7 +245,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				tolerance:    3 * time.Second,
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
-				mv:           noopMessageVerifier{},
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -274,7 +271,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				maxAge:       30 * time.Second,
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
-				mv:           noopMessageVerifier{},
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -368,27 +364,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			},
 		},
 		{
-			uc:     "message verifier fails",
-			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
-			exp: func() expectations {
-				mv := NewMessageVerifierMock(t)
-				mv.EXPECT().verify(mock.Anything).Return(errors.New("test error"))
-
-				return expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal, mv: mv}
-			}(),
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
-			},
-			assert: func(t *testing.T, err error) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorContains(t, err, "test error")
-			},
-		},
-		{
 			uc: "successful assertion with all possible parameters",
 			params: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
@@ -414,7 +389,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				return expectations{
 					identifiers: ids,
 					maxAge:      5 * time.Second,
-					mv:          noopMessageVerifier{},
 				}
 			}(),
 			expAlg: EcdsaP256Sha256,
@@ -1317,6 +1291,45 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, ErrVerificationFailed)
 				require.NotErrorIs(t, err, &NoApplicableSignatureError{})
 				require.ErrorContains(t, err, "test error")
+			},
+		},
+		{
+			uc: "signature verification fails due to invalid second content digest",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithCreatedTimestampRequired(false),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":            []string{"example.com"},
+					"Date":            []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+					"Content-Type":    []string{"application/json"},
+					"Content-Digest":  []string{"sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:, sha-256=:ayJoZWxsbyI6ICJ3b3JsZCJ9:"},
+					"Content-Length":  []string{"18"},
+					"Signature-Input": []string{`sig-b22=("@authority" "content-digest" "@query-param";name="Pet");created=1618884473;keyid="test-key-rsa-pss";tag="header-example"`},
+					"Signature":       []string{"sig-b22=:LjbtqUbfmvjj5C5kr1Ugj4PmLYvx9wVjZvD9GsTT4F7GrcQEdJzgI9qHxICagShLRiLMlAJjtq6N4CDfKtjvuJyE5qH7KT8UCMkSowOB4+ECxCmT8rtAmj/0PIXxi0A0nxKyB09RNrCQibbUjsLS/2YyFYXEu4TRJQzRw1rLEuEfY17SARYhpTlaqwZVtR8NV7+4UKkjqpcAoFqWFQh62s7Cl+H2fjBSpqfZUJcsIk4N6wiKYd4je2U/lankenQ99PZfB4jY3I5rSV2DSBVkSFsURIjYErOs0tFTQosMTAoxk//0RoKUqiYY8Bh0aaUEb0rQl3/XaVe4bXTugEjHSw==:"},
+				},
+				IsRequest: true,
+				Body: func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(`{"hello": "world"}`)), nil
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-key-rsa-pss").Return(
+					Key{Key: tkRSAPSS, KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512}, nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrContentDigestMismatch)
 			},
 		},
 		{

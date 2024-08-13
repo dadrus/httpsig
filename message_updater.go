@@ -19,21 +19,3 @@ func (v compositeMessageUpdater) update(msg *Message) error {
 
 	return nil
 }
-
-func createMessageUpdater(identifiers []*componentIdentifier) messageUpdater {
-	var cmv compositeMessageUpdater
-
-	for _, id := range identifiers {
-		if id.Value == "content-digest" {
-			if _, present := id.Params.Get("req"); !present {
-				cmv = append(cmv, contentDigester{})
-			}
-		}
-	}
-
-	if len(cmv) == 0 {
-		return noopMessageUpdater{}
-	}
-
-	return cmv
-}

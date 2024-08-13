@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"crypto"
 	"crypto/subtle"
 	"fmt"
 	"io"
@@ -9,7 +10,14 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-type contentDigester struct{ fromRequest bool }
+type contentDigester struct {
+	// alg and algName are used to create message digest
+	alg     crypto.Hash
+	algName DigestAlgorithm
+
+	// fromRequest is used only to verify message digest
+	fromRequest bool
+}
 
 func (c contentDigester) update(msg *Message) error {
 	if val := msg.Header.Get(headerContentDigest); len(val) != 0 {
@@ -24,11 +32,19 @@ func (c contentDigester) update(msg *Message) error {
 
 	dict := httpsfv.NewDictionary()
 
-	for name, alg := range supportedAlgs {
+	var algs map[DigestAlgorithm]crypto.Hash
+
+	if len(c.algName) != 0 {
+		algs = map[DigestAlgorithm]crypto.Hash{c.algName: c.alg}
+	} else {
+		algs = supportedAlgs
+	}
+
+	for name, alg := range algs {
 		md := alg.New()
 		_, _ = md.Write(body)
 
-		dict.Add(name, httpsfv.NewItem(md.Sum(nil)))
+		dict.Add(string(name), httpsfv.NewItem(md.Sum(nil)))
 	}
 
 	marshalled, err := httpsfv.Marshal(dict)
@@ -68,7 +84,7 @@ func (c contentDigester) verify(msg *Message) error {
 	var hasVerified bool
 
 	for _, algName := range dict.Names() {
-		alg, known := supportedAlgs[algName]
+		alg, known := supportedAlgs[DigestAlgorithm(algName)]
 		if !known {
 			continue
 		}
@@ -91,7 +107,7 @@ func (c contentDigester) verify(msg *Message) error {
 		}
 
 		if subtle.ConstantTimeCompare(res, value) != 1 {
-			return fmt.Errorf("%w: content-digest mismatch", ErrVerificationFailed)
+			return ErrContentDigestMismatch
 		}
 	}
 

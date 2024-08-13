@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -59,6 +60,7 @@ func WithTTL(ttl time.Duration) SignerOption {
 func WithComponents(identifiers ...string) SignerOption {
 	return func(s *signer) error {
 		var err error
+
 		s.ids, err = toComponentIdentifiers(identifiers)
 
 		return err
@@ -85,6 +87,18 @@ func WithNonce(ng NonceGetter) SignerOption {
 	}
 }
 
+func WithContentDigestAlgorithm(alg DigestAlgorithm) SignerOption {
+	return func(s *signer) error {
+		if _, known := supportedAlgs[alg]; !known {
+			return fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
+		}
+
+		s.cdAlg = alg
+
+		return nil
+	}
+}
+
 // NewSigner creates a new signer with the given options.
 func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	ps, err := newPayloadSigner(key.Key, key.KeyID, key.Algorithm)
@@ -97,12 +111,27 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 		ttl:   30 * time.Second, //nolint:mnd
 		ng:    nonceGetter{},
 		ps:    ps,
+		mu:    noopMessageUpdater{},
 	}
 
 	for _, opt := range opts {
 		if err = opt(sig); err != nil {
 			return nil, err
 		}
+	}
+
+	var cmv compositeMessageUpdater
+
+	for _, id := range sig.ids {
+		if id.Value == "content-digest" {
+			if _, present := id.Params.Get("req"); !present {
+				cmv = append(cmv, contentDigester{alg: supportedAlgs[sig.cdAlg], algName: sig.cdAlg})
+			}
+		}
+	}
+
+	if len(cmv) != 0 {
+		sig.mu = cmv
 	}
 
 	return sig, nil
@@ -115,11 +144,17 @@ type signer struct {
 	tag   string
 	ng    NonceGetter
 	ps    payloadSigner
+	cdAlg DigestAlgorithm
+	mu    messageUpdater
 }
 
 func (s *signer) Sign(msg *Message) (http.Header, error) {
 	sp, err := s.signatureParameters(msg.Context)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = s.mu.update(msg); err != nil {
 		return nil, err
 	}
 

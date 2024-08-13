@@ -3,10 +3,11 @@ package httpsig
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWithExpectedKey(t *testing.T) {
@@ -303,6 +304,8 @@ func TestNewAcceptedSignature(t *testing.T) {
 				WithExpectedComponents("@foo"),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
+
 				require.Error(t, err)
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 				require.Nil(t, asb)
@@ -332,7 +335,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 					return "", errors.New("test error")
 				})),
 			},
-			assert: func(t *testing.T, err error, hdr http.Header) {
+			assert: func(t *testing.T, err error, _ http.Header) {
 				t.Helper()
 
 				require.Error(t, err)

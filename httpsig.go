@@ -14,6 +14,7 @@ var (
 	ErrNoKeyProvided                  = errors.New("no key provided")
 	ErrInvalidSignature               = errors.New("invalid signature")
 	ErrVerificationFailed             = errors.New("verification failed")
+	ErrContentDigestMismatch          = errors.New("content digest mismatch")
 	ErrMalformedData                  = errors.New("malformed data")
 	ErrUnsupportedComponentIdentifier = errors.New("unsupported component identifier")
 	ErrInvalidComponentIdentifier     = errors.New("invalid component identifier")
@@ -53,6 +54,8 @@ const (
 	headerSignatureInput    = "Signature-Input"
 	headerContentDigest     = "Content-Digest"
 	headerWantContentDigest = "Want-Content-Digest"
+
+	componentIdentifierContentDigest = "content-digest"
 )
 
 // SignatureAlgorithm is the signature algorithm to use.
@@ -115,7 +118,7 @@ type Key struct {
 func (k Key) ResolveKey(_ context.Context, _ string) (Key, error) { return k, nil }
 
 // nolint: gochecknoglobals
-var supportedAlgs = map[string]crypto.Hash{
-	"sha-256": crypto.SHA256,
-	"sha-512": crypto.SHA512,
+var supportedAlgs = map[DigestAlgorithm]crypto.Hash{
+	Sha256: crypto.SHA256,
+	Sha512: crypto.SHA512,
 }

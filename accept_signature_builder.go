@@ -124,7 +124,7 @@ func (asb *AcceptSignatureBuilder) setIdentifiers(identifiers []*componentIdenti
 	asb.identifiers = identifiers
 
 	for _, identifier := range asb.identifiers {
-		if identifier.Value == "content-digest" {
+		if identifier.Value == componentIdentifierContentDigest {
 			asb.wantContentDigest = true
 
 			break
@@ -173,8 +173,8 @@ func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder,
 		nonceGetter:  nonceGetter{},
 		label:        "sig",
 		cdAlgPrefs: []string{
-			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),
-			AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(),
+			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),  //nolint: mnd
+			AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(), //nolint: mnd
 		},
 	}
 

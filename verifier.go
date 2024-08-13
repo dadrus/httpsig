@@ -54,13 +54,8 @@ func WithRequiredComponents(identifiers ...string) VerifierOption {
 		var err error
 
 		exp.identifiers, err = toComponentIdentifiers(identifiers)
-		if err != nil {
-			return err
-		}
 
-		exp.mv = createMessageVerifier(exp.identifiers)
-
-		return nil
+		return err
 	}
 }
 
@@ -104,7 +99,6 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 		exp := &expectations{
 			tolerance: -1,
 			maxAge:    -1,
-			mv:        noopMessageVerifier{},
 		}
 
 		for _, opt := range opts {
@@ -209,7 +203,6 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 
 	global := &expectations{
 		maxAge:       30 * time.Second, //nolint:mnd
-		mv:           noopMessageVerifier{},
 		reqExpiresTS: &trueValue,
 		reqCreatedTS: &trueValue,
 	}
@@ -283,7 +276,6 @@ type expectations struct {
 	asb          *AcceptSignatureBuilder
 	reqCreatedTS *bool
 	reqExpiresTS *bool
-	mv           messageVerifier
 }
 
 //nolint:cyclop
@@ -293,7 +285,12 @@ func (e *expectations) assert(
 	keyAlg SignatureAlgorithm,
 	nc NonceChecker,
 ) error {
-	var nonce string
+	var (
+		nonce             string
+		missingComponents []string
+		cmv               compositeMessageVerifier
+		mv                messageVerifier
+	)
 
 	nonceValue, noncePresent := params.Params.Get(string(Nonce))
 	if noncePresent {
@@ -333,8 +330,6 @@ func (e *expectations) assert(
 		}
 	}
 
-	var missingComponents []string
-
 	for _, expIdentifier := range e.identifiers {
 		if !params.hasIdentifier(expIdentifier) {
 			res, _ := httpsfv.Marshal(expIdentifier)
@@ -347,7 +342,21 @@ func (e *expectations) assert(
 			ErrMissingParameter, strings.Join(missingComponents, ", "))
 	}
 
-	return e.mv.verify(msg)
+	for _, id := range params.identifiers {
+		if id.Value == "content-digest" {
+			_, fromReq := id.Params.Get("req")
+
+			cmv = append(cmv, contentDigester{fromRequest: fromReq})
+		}
+	}
+
+	if len(cmv) == 0 {
+		mv = noopMessageVerifier{}
+	} else {
+		mv = cmv
+	}
+
+	return mv.verify(msg)
 }
 
 type verifier struct {

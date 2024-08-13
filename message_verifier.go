@@ -21,21 +21,3 @@ func (v compositeMessageVerifier) verify(msg *Message) error {
 
 	return nil
 }
-
-func createMessageVerifier(identifiers []*componentIdentifier) messageVerifier {
-	var cmv compositeMessageVerifier
-
-	for _, id := range identifiers {
-		if id.Value == "content-digest" {
-			_, fromReq := id.Params.Get("req")
-
-			cmv = append(cmv, contentDigester{fromRequest: fromReq})
-		}
-	}
-
-	if len(cmv) == 0 {
-		return noopMessageVerifier{}
-	}
-
-	return cmv
-}

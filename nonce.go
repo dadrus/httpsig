@@ -19,8 +19,9 @@ func (ng NonceGetterFunc) GetNonce(ctx context.Context) (string, error) { return
 
 //go:generate mockery --name NonceChecker --structname NonceCheckerMock --inpackage --testonly
 
-// NonceChecker is responsible for the verification of the nonce received in a signature, e.g. to prevent replay attacks,
-// or to verify that the nonce is the expected one, like if requested using the Accept-Signature header.
+// NonceChecker is responsible for the verification of the nonce received in a signature,
+// e.g. to prevent replay attacks,  or to verify that the nonce is the expected one, like
+// if requested using the Accept-Signature header.
 type NonceChecker interface {
 	CheckNonce(ctx context.Context, nonce string) error
 }

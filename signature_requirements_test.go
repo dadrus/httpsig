@@ -447,8 +447,8 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, params)
 
-				assert.Equal(t, true, params.created)
-				assert.Equal(t, true, params.expires)
+				assert.True(t, params.created)
+				assert.True(t, params.expires)
 				assert.Equal(t, "nonce", params.nonce)
 				assert.Equal(t, "tag", params.tag)
 				assert.Equal(t, RsaPssSha384, params.alg)
