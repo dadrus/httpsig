@@ -23,6 +23,8 @@ var (
 	ErrVerifierCreation               = errors.New("verifier creation failed")
 	ErrParameter                      = errors.New("parameter error")
 	ErrValidity                       = errors.New("validity error")
+	ErrMissingParameter               = errors.New("missing parameter error")
+	ErrSignatureNegotiationError      = errors.New("signature negotiation error")
 )
 
 type NoApplicableSignatureError struct {
