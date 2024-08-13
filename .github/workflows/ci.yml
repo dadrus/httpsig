@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  lint-code:
+    name: Run Linters
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
+        with:
+          fetch-depth: 0
+      - name: Review code
+        uses: reviewdog/action-golangci-lint@7708105983c614f7a2725e2172908b7709d1c3e4 # v2.6.2
+        with:
+          go_version: 1.22.5
+          golangci_lint_version: v1.59.1
+          reporter: github-pr-review
+          fail_on_error: true
+
+  check-licenses:
+    name: Check Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
+      - name: Set up Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: 1.22.5
+      - name: Get google/go-licenses package
+        run: go install github.com/google/go-licenses@v1.6.0
+      - name: Check the licenses
+        run: |
+          go-licenses check --disallowed_types=forbidden,restricted,reciprocal,permissive,unknown .
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5
+        with:
+          go-version: 1.22.5
+      - name: Execute tests
+        run: |
+          go test -v -gcflags=all=-l -cover ./... -coverprofile coverage.out -coverpkg ./...
+      - name: Upload code coverage report
+        uses: codecov/codecov-action@e28ff129e5465c2c0dcc6f003fc735cb6ae0c673 # v4.5.0
+        with:
+          files: coverage.out
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
