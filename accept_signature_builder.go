@@ -41,19 +41,14 @@ func WithExpectedLabel(label string) AcceptSignatureOption {
 
 func WithExpectedComponents(identifiers ...string) AcceptSignatureOption {
 	return func(asb *AcceptSignatureBuilder) error {
-		var err error
-
-		asb.identifiers, err = toComponentIdentifiers(identifiers)
-
-		for _, identifier := range asb.identifiers {
-			if identifier.Value == "content-digest" {
-				asb.wantContentDigest = true
-
-				break
-			}
+		identifiers, err := toComponentIdentifiers(identifiers)
+		if err != nil {
+			return err
 		}
 
-		return err
+		asb.setIdentifiers(identifiers)
+
+		return nil
 	}
 }
 
@@ -123,6 +118,18 @@ type AcceptSignatureBuilder struct {
 	addCreatedTS      bool
 	addExpiresTS      bool
 	wantContentDigest bool
+}
+
+func (asb *AcceptSignatureBuilder) setIdentifiers(identifiers []*componentIdentifier) {
+	asb.identifiers = identifiers
+
+	for _, identifier := range asb.identifiers {
+		if identifier.Value == "content-digest" {
+			asb.wantContentDigest = true
+
+			break
+		}
+	}
 }
 
 func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header) error {
