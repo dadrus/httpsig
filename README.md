@@ -1,3 +1,8 @@
+[![CI](https://github.com/dadrus/httpsig/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dadrus/httpsig/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/dadrus/httpsig/branch/main/graph/badge.svg)](https://codecov.io/gh/dadrus/httpsig)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dadrus/httpsig)](https://goreportcard.com/report/github.com/dadrus/httpsig)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dadrus/httpsig.svg)](https://pkg.go.dev/github.com/dadrus/httpsig)
+
 ## Introduction
 
 `httpsig` is a library that facilitates the signing and verification of HTTP requests in compliance with the [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421.html) standard.
