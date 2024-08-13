@@ -1,7 +1,5 @@
 package httpsig
 
-//go:generate mockery --name messageVerifier --structname MessageVerifierMock --inpackage --testonly
-
 type messageVerifier interface {
 	verify(msg *Message) error
 }
