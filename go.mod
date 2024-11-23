@@ -5,7 +5,7 @@ go 1.22.5
 require (
 	github.com/dunglas/httpsfv v1.0.2
 	github.com/felixge/httpsnoop v1.0.4
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
