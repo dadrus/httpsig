@@ -16,7 +16,7 @@
     }
   ],
   "configMigration": true,
-  "baseBranches": [
+  "baseBranchPatterns": [
     "main"
   ],
   "assigneesFromCodeOwners": true,
