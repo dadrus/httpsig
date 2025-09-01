@@ -120,16 +120,25 @@ type AcceptSignatureBuilder struct {
 	wantContentDigest bool
 }
 
-func (asb *AcceptSignatureBuilder) setIdentifiers(identifiers []*componentIdentifier) {
-	asb.identifiers = identifiers
+func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder, error) {
+	asb := &AcceptSignatureBuilder{
+		addCreatedTS: true,
+		addExpiresTS: true,
+		nonceGetter:  nonceGetter{},
+		label:        "sig",
+		cdAlgPrefs: []string{
+			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),  //nolint: mnd
+			AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(), //nolint: mnd
+		},
+	}
 
-	for _, identifier := range asb.identifiers {
-		if identifier.Value == componentIdentifierContentDigest {
-			asb.wantContentDigest = true
-
-			break
+	for _, opt := range opts {
+		if err := opt(asb); err != nil {
+			return nil, err
 		}
 	}
+
+	return asb, nil
 }
 
 func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header) error {
@@ -166,23 +175,14 @@ func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header
 	return nil
 }
 
-func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder, error) {
-	asb := &AcceptSignatureBuilder{
-		addCreatedTS: true,
-		addExpiresTS: true,
-		nonceGetter:  nonceGetter{},
-		label:        "sig",
-		cdAlgPrefs: []string{
-			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),  //nolint: mnd
-			AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(), //nolint: mnd
-		},
-	}
+func (asb *AcceptSignatureBuilder) setIdentifiers(identifiers []*componentIdentifier) {
+	asb.identifiers = identifiers
 
-	for _, opt := range opts {
-		if err := opt(asb); err != nil {
-			return nil, err
+	for _, identifier := range asb.identifiers {
+		if identifier.Value == componentIdentifierContentDigest {
+			asb.wantContentDigest = true
+
+			break
 		}
 	}
-
-	return asb, nil
 }

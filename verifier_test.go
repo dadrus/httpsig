@@ -583,7 +583,6 @@ func TestWithRequiredTag(t *testing.T) {
 			err := recoverIfPanics(t, func() error {
 				return WithRequiredTag("test", tc.opts...)(v, nil, false)
 			})
-
 			if err == nil {
 				require.Len(t, v.tagExpectations, 1)
 			}

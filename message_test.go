@@ -192,7 +192,7 @@ func TestMessageFromRequest(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"hello": "world"}`), data1)
+				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 			},
 		},
 		{
@@ -231,7 +231,7 @@ func TestMessageFromRequest(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"hello": "world"}`), data1)
+				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 			},
 		},
 	} {
@@ -371,7 +371,7 @@ Content-Length: 23
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"hello": "world"}`), data1)
+				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 
 				assert.NotNil(t, msg.Body)
 
@@ -388,7 +388,7 @@ Content-Length: 23
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"message": "good dog"}`), data1)
+				assert.JSONEq(t, `{"message": "good dog"}`, string(data1))
 			},
 		},
 	} {
@@ -454,7 +454,7 @@ func TestMessageForResponse(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"hello": "world"}`), data1)
+				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 
 				assert.NotNil(t, msg.Body)
 
@@ -516,7 +516,7 @@ func TestMessageForResponse(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"hello": "world"}`), data1)
+				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 
 				assert.NotNil(t, msg.Body)
 
@@ -533,7 +533,7 @@ func TestMessageForResponse(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.Equal(t, data1, data2)
-				assert.Equal(t, []byte(`{"message": "good dog"}`), data1)
+				assert.JSONEq(t, `{"message": "good dog"}`, string(data1))
 			},
 		},
 	} {
