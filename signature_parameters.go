@@ -170,7 +170,7 @@ func (p *signatureParameters) toSignatureBase(msg *Message) ([]byte, error) {
 
 func (p *signatureParameters) hasIdentifier(id *componentIdentifier) bool {
 	for _, identifier := range p.identifiers {
-		if identifier.Item.Value == id.Item.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
+		if identifier.Value == id.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
 			return true
 		}
 	}

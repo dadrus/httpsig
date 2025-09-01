@@ -203,6 +203,8 @@ func TestRSASignerSignPayload(t *testing.T) {
 					err = rsa.VerifyPSS(&sig.privateKey.PublicKey, sig.hash, hashed, res, &rsa.PSSOptions{
 						SaltLength: rsa.PSSSaltLengthEqualsHash,
 					})
+				default:
+					require.Fail(t, "unknown algorithm")
 				}
 
 				require.NoError(t, err)
