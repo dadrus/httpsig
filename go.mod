@@ -1,10 +1,9 @@
 module github.com/dadrus/httpsig
 
-go 1.22.5
+go 1.23.12
 
 require (
 	github.com/dunglas/httpsfv v1.1.0
-	github.com/felixge/httpsnoop v1.0.4
 	github.com/stretchr/testify v1.11.1
 )
 
