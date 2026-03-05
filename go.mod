@@ -1,6 +1,6 @@
 module github.com/dadrus/httpsig
 
-go 1.23.12
+go 1.24.13
 
 require (
 	github.com/dunglas/httpsfv v1.1.0

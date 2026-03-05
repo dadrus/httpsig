@@ -291,9 +291,6 @@ func TestSignerSign(t *testing.T) {
 	pkp384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
 
-	pk512, err := rsa.GenerateKey(rand.Reader, 512) //nolint:gosec
-	require.NoError(t, err)
-
 	blockPrivate, _ := pem.Decode([]byte(testPrivKeyRSAPSS))
 	assert.NotNil(t, blockPrivate, "could not decode test private key pem")
 
@@ -405,31 +402,6 @@ func TestSignerSign(t *testing.T) {
 					"Host":           []string{"example.com"},
 					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
 					"Content-Type":   []string{"application/json"},
-					"Content-Length": []string{"18"},
-				},
-				IsRequest: true,
-			},
-			assert: func(t *testing.T, err error, _ http.Header) {
-				t.Helper()
-
-				require.Error(t, err)
-			},
-		},
-		{
-			uc:  "failed signing payload",
-			key: Key{KeyID: "test", Algorithm: RsaPkcs1v15Sha512, Key: pk512},
-			opts: []SignerOption{
-				WithComponents("@authority"),
-			},
-			msg: &Message{
-				Method:    http.MethodPost,
-				Authority: "example.com",
-				URL:       testURL,
-				Header: http.Header{
-					"Host":           []string{"example.com"},
-					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
-					"Content-Type":   []string{"application/json"},
-					"Content-Digest": []string{"sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:"},
 					"Content-Length": []string{"18"},
 				},
 				IsRequest: true,

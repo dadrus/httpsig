@@ -154,9 +154,6 @@ func TestRSASignerSignPayload(t *testing.T) {
 
 	message := []byte("test message")
 
-	pk512, err := rsa.GenerateKey(rand.Reader, 512) //nolint:gosec
-	require.NoError(t, err)
-
 	pk2048, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -172,7 +169,6 @@ func TestRSASignerSignPayload(t *testing.T) {
 		alg SignatureAlgorithm
 		err error
 	}{
-		{uc: "message too long", key: pk512, alg: RsaPkcs1v15Sha512, err: rsa.ErrMessageTooLong},
 		{uc: "2048 key with RsaPkcs1v15Sha256", key: pk2048, alg: RsaPkcs1v15Sha256},
 		{uc: "3072 key with RsaPkcs1v15Sha384", key: pk3072, alg: RsaPkcs1v15Sha384},
 		{uc: "4096 key with RsaPkcs1v15Sha512", key: pk4096, alg: RsaPkcs1v15Sha512},
