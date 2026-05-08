@@ -295,10 +295,10 @@ func (e *expectations) assert(
 	nonceValue, noncePresent := params.Params.Get(string(Nonce))
 	if noncePresent {
 		nonce = nonceValue.(string) //nolint: forcetypeassert
-	}
 
-	if err := nc.CheckNonce(msg.Context, nonce); err != nil {
-		return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
+		if err := nc.CheckNonce(msg.Context, nonce); err != nil {
+			return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
+		}
 	}
 
 	if len(params.alg) != 0 && params.alg != keyAlg {

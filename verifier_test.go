@@ -120,8 +120,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			expAlg: EcdsaP256Sha256,
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -144,8 +142,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -172,8 +168,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -198,8 +192,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -220,8 +212,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -248,8 +238,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -274,8 +262,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -296,8 +282,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -318,8 +302,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			}(),
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -335,8 +317,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			exp:    expectations{reqCreatedTS: &trueVal, reqExpiresTS: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
@@ -352,8 +332,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			exp:    expectations{reqCreatedTS: &falseVal, reqExpiresTS: &trueVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, "").Return(nil)
 			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
