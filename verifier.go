@@ -86,6 +86,16 @@ func WithNonceChecker(checker NonceChecker) VerifierOption {
 	}
 }
 
+// WithRequiredNonceCheck specifies if at signature verification,
+// we treat a missing "nonce" parameter as an error.
+func WithRequiredNonceCheck(flag bool) VerifierOption {
+	return func(v *verifier, exp *expectations, _ bool) error {
+		exp.reqNonceCheck = &flag
+
+		return nil
+	}
+}
+
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	return func(ver *verifier, _ *expectations, f bool) error {
 		if f {
@@ -202,9 +212,10 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	}
 
 	global := &expectations{
-		maxAge:       30 * time.Second, //nolint:mnd
-		reqExpiresTS: &trueValue,
-		reqCreatedTS: &trueValue,
+		maxAge:        30 * time.Second, //nolint:mnd
+		reqExpiresTS:  &trueValue,
+		reqCreatedTS:  &trueValue,
+		reqNonceCheck: &trueValue,
 	}
 
 	for _, opt := range opts {
@@ -248,6 +259,10 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 			exp.reqCreatedTS = global.reqCreatedTS
 		}
 
+		if exp.reqNonceCheck == nil {
+			exp.reqNonceCheck = global.reqNonceCheck
+		}
+
 		if global.asb != nil && exp.asb == nil {
 			// create a copy
 			tmp := *global.asb
@@ -270,12 +285,13 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 }
 
 type expectations struct {
-	tolerance    time.Duration
-	maxAge       time.Duration
-	identifiers  []*componentIdentifier
-	asb          *AcceptSignatureBuilder
-	reqCreatedTS *bool
-	reqExpiresTS *bool
+	tolerance     time.Duration
+	maxAge        time.Duration
+	identifiers   []*componentIdentifier
+	asb           *AcceptSignatureBuilder
+	reqCreatedTS  *bool
+	reqExpiresTS  *bool
+	reqNonceCheck *bool
 }
 
 //nolint:cyclop
@@ -299,6 +315,8 @@ func (e *expectations) assert(
 		if err := nc.CheckNonce(msg.Context, nonce); err != nil {
 			return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
 		}
+	} else if *e.reqNonceCheck {
+		return fmt.Errorf("%w: expected nonce parameter not present", ErrParameter)
 	}
 
 	if len(params.alg) != 0 && params.alg != keyAlg {
@@ -310,7 +328,7 @@ func (e *expectations) assert(
 
 	if params.expires.Equal(time.Time{}) {
 		if *e.reqExpiresTS {
-			return fmt.Errorf("%w: expected expires parameter not preset", ErrMissingParameter)
+			return fmt.Errorf("%w: expected expires parameter not present", ErrMissingParameter)
 		}
 	} else if now.After(params.expires.Add(e.tolerance)) {
 		return fmt.Errorf("%w: signature expired", ErrValidity)
@@ -318,7 +336,7 @@ func (e *expectations) assert(
 
 	if params.created.Equal(time.Time{}) {
 		if *e.reqCreatedTS {
-			return fmt.Errorf("%w: expected created parameter not preset", ErrMissingParameter)
+			return fmt.Errorf("%w: expected created parameter not present", ErrMissingParameter)
 		}
 	} else {
 		if now.Before(params.created.Add(-1 * e.tolerance)) {

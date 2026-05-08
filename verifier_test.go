@@ -93,7 +93,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 					return params
 				}(),
 			},
-			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
+			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal, reqNonceCheck: &trueVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 
@@ -117,6 +117,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 					return params
 				}(),
 			},
+			exp:    expectations{reqNonceCheck: &falseVal},
 			expAlg: EcdsaP256Sha256,
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -139,7 +140,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 					return params
 				}(),
 			},
-			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
+			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal, reqNonceCheck: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 			},
@@ -162,9 +163,10 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{
-				tolerance:    3 * time.Second,
-				reqCreatedTS: &falseVal,
-				reqExpiresTS: &falseVal,
+				tolerance:     3 * time.Second,
+				reqCreatedTS:  &falseVal,
+				reqExpiresTS:  &falseVal,
+				reqNonceCheck: &falseVal,
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -186,9 +188,10 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{
-				tolerance:    2 * time.Second,
-				reqCreatedTS: &falseVal,
-				reqExpiresTS: &falseVal,
+				tolerance:     2 * time.Second,
+				reqCreatedTS:  &falseVal,
+				reqExpiresTS:  &falseVal,
+				reqNonceCheck: &falseVal,
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -209,7 +212,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 					return params
 				}(),
 			},
-			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
+			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal, reqNonceCheck: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 			},
@@ -232,9 +235,10 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{
-				tolerance:    3 * time.Second,
-				reqCreatedTS: &falseVal,
-				reqExpiresTS: &falseVal,
+				tolerance:     3 * time.Second,
+				reqCreatedTS:  &falseVal,
+				reqExpiresTS:  &falseVal,
+				reqNonceCheck: &falseVal,
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -256,9 +260,10 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{
-				maxAge:       30 * time.Second,
-				reqCreatedTS: &falseVal,
-				reqExpiresTS: &falseVal,
+				maxAge:        30 * time.Second,
+				reqCreatedTS:  &falseVal,
+				reqExpiresTS:  &falseVal,
+				reqNonceCheck: &falseVal,
 			},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -279,7 +284,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 					return params
 				}(),
 			},
-			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
+			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal, reqNonceCheck: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 			},
@@ -298,7 +303,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				ids, err := toComponentIdentifiers([]string{"@method;req", "@authority"})
 				require.NoError(t, err)
 
-				return expectations{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
+				return expectations{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal, reqNonceCheck: &falseVal}
 			}(),
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
@@ -314,7 +319,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 		{
 			uc:     "expected created parameter is missing",
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
-			exp:    expectations{reqCreatedTS: &trueVal, reqExpiresTS: &falseVal},
+			exp:    expectations{reqCreatedTS: &trueVal, reqExpiresTS: &falseVal, reqNonceCheck: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 			},
@@ -329,7 +334,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 		{
 			uc:     "expected expires parameter is missing",
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
-			exp:    expectations{reqCreatedTS: &falseVal, reqExpiresTS: &trueVal},
+			exp:    expectations{reqCreatedTS: &falseVal, reqExpiresTS: &trueVal, reqNonceCheck: &falseVal},
 			configure: func(t *testing.T, nc *NonceCheckerMock) {
 				t.Helper()
 			},
@@ -1093,8 +1098,12 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 		{
-			uc:   "signature parameters assertion error",
-			opts: []VerifierOption{WithRequiredTag("foo"), WithValidityTolerance(1 * time.Second)},
+			uc: "signature parameters assertion error",
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+				WithValidityTolerance(1 * time.Second),
+				WithRequiredNonceCheck(false),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();expires=1618884470;keyid="test";tag="foo"`},
@@ -1120,6 +1129,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithRequiredTag("foo"),
 				WithExpiredTimestampRequired(false),
 				WithCreatedTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1146,6 +1156,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithRequiredTag("foo"),
 				WithExpiredTimestampRequired(false),
 				WithCreatedTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1271,11 +1282,45 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 		{
+			uc: "signature parameters negotiation fails because missing nonce parameter",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithRequiredComponents("@method"),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":            []string{"example.com"},
+					"Content-Length":  []string{"18"},
+					"Signature-Input": []string{`sig=();created=1618884473;keyid="test-key";tag="foo"`},
+					"Signature":       []string{"sig=:dGVzdA==:"},
+				},
+				IsRequest: true,
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-key").Return(
+					Key{Key: tkRSAPSS, KeyID: "test-key", Algorithm: RsaPssSha512}, nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrParameter)
+				require.NotErrorIs(t, err, &NoApplicableSignatureError{})
+				require.ErrorContains(t, err, "expected nonce parameter not present")
+			},
+		},
+		{
 			uc: "signature verification fails due to invalid second content digest",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1351,6 +1396,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1389,6 +1435,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1427,6 +1474,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:     http.MethodPost,
@@ -1463,6 +1511,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1498,6 +1547,7 @@ func TestVerifierVerify(t *testing.T) {
 				WithValidateAllSignatures(),
 				WithCreatedTimestampRequired(false),
 				WithExpiredTimestampRequired(false),
+				WithRequiredNonceCheck(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
