@@ -940,6 +940,9 @@ func TestVerifierVerify(t *testing.T) {
 	tkEd25519, ok := key.(ed25519.PublicKey)
 	require.True(t, ok)
 
+	nc := NewNonceCheckerMock(t)
+	nc.EXPECT().CheckNonce(mock.Anything, "").Return(fmt.Errorf("empty nonce has been seen"))
+
 	for _, tc := range []struct {
 		uc                string
 		opts              []VerifierOption
@@ -1282,7 +1285,7 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 		{
-			uc: "signature parameters negotiation fails because missing nonce parameter",
+			uc: "signature parameters negotiation fails because missing nonce parameter and default has nonce check required",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithRequiredComponents("@method"),
@@ -1312,6 +1315,41 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, ErrParameter)
 				require.NotErrorIs(t, err, &NoApplicableSignatureError{})
 				require.ErrorContains(t, err, "expected nonce parameter not present")
+			},
+		},
+		{
+			uc: "signature parameters negotiation fails because nonce parameter is invalid to the checker",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithRequiredComponents("@method"),
+				WithRequiredNonceCheck(false),
+				WithNonceChecker(nc),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":            []string{"example.com"},
+					"Content-Length":  []string{"18"},
+					"Signature-Input": []string{`sig=();created=1618884473;keyid="test-key";nonce="";tag="foo"`},
+					"Signature":       []string{"sig=:dGVzdA==:"},
+				},
+				IsRequest: true,
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-key").Return(
+					Key{Key: tkRSAPSS, KeyID: "test-key", Algorithm: RsaPssSha512}, nil)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.NotErrorIs(t, err, &NoApplicableSignatureError{})
+				require.ErrorContains(t, err, "nonce has been seen")
 			},
 		},
 		{
