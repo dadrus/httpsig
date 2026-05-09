@@ -77,9 +77,16 @@ func WithMaxAge(d time.Duration) VerifierOption {
 }
 
 func WithNonceChecker(checker NonceChecker) VerifierOption {
-	return func(v *verifier, _ *expectations, _ bool) error {
+	forceCheckOnCustomChecker := true
+
+	return func(v *verifier, ext *expectations, _ bool) error {
 		if checker != nil {
 			v.nonceChecker = checker
+			if ext.reqNonceCheck == nil {
+				// When we're passing a custom NonceChecker, we turn on the mandatory nonce check if it wasn't
+				// previously set using WithRequiredNonce().
+				ext.reqNonceCheck = &forceCheckOnCustomChecker
+			}
 		}
 
 		return nil
@@ -204,6 +211,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	}
 
 	trueValue := true
+	falseValue := true
 
 	ver := &verifier{
 		keyResolver:     resolver,
@@ -215,7 +223,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 		maxAge:        30 * time.Second, //nolint:mnd
 		reqExpiresTS:  &trueValue,
 		reqCreatedTS:  &trueValue,
-		reqNonceCheck: &trueValue,
+		reqNonceCheck: &falseValue,
 	}
 
 	for _, opt := range opts {
