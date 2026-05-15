@@ -317,15 +317,80 @@ func TestECDSAverifierVerifyPayload(t *testing.T) {
 	pkp521, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		key *ecdsa.PrivateKey
-		alg SignatureAlgorithm
+	for uc, tc := range map[string]struct {
+		key             *ecdsa.PrivateKey
+		alg             SignatureAlgorithm
+		mutateMessage   func(t *testing.T, message []byte) []byte
+		mutateSignature func(t *testing.T, signature []byte) []byte
+		shouldError     bool
 	}{
-		{alg: EcdsaP256Sha256, key: pkp256},
-		{alg: EcdsaP384Sha384, key: pkp384},
-		{alg: EcdsaP521Sha512, key: pkp521},
+		"valid signature with P256": {
+			alg: EcdsaP256Sha256,
+			key: pkp256,
+		},
+		"valid signature with P384": {
+			alg: EcdsaP384Sha384,
+			key: pkp384,
+		},
+		"valid signature with P521": {
+			alg: EcdsaP521Sha512,
+			key: pkp521,
+		},
+		"signature is too short": {
+			shouldError: true,
+			alg:         EcdsaP256Sha256,
+			key:         pkp256,
+			mutateSignature: func(t *testing.T, signature []byte) []byte {
+				t.Helper()
+
+				return signature[0 : len(signature)-1]
+			},
+		},
+		"signature is too long": {
+			shouldError: true,
+			alg:         EcdsaP256Sha256,
+			key:         pkp256,
+			mutateSignature: func(t *testing.T, signature []byte) []byte {
+				t.Helper()
+
+				res := make([]byte, len(signature)+1)
+				copy(res, signature)
+
+				return res
+			},
+		},
+		"wrong signature": {
+			shouldError: true,
+			alg:         EcdsaP256Sha256,
+			key:         pkp256,
+			mutateMessage: func(t *testing.T, message []byte) []byte {
+				t.Helper()
+
+				message[0] ^= 0x01
+
+				return message
+			},
+		},
 	} {
-		t.Run(string(tc.alg), func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
+			mutateMessage := tc.mutateMessage
+			if mutateMessage == nil {
+				mutateMessage = func(t *testing.T, message []byte) []byte {
+					t.Helper()
+
+					return message
+				}
+			}
+
+			mutateSignature := tc.mutateSignature
+			if mutateSignature == nil {
+				mutateSignature = func(t *testing.T, signature []byte) []byte {
+					t.Helper()
+
+					return signature
+				}
+			}
+
 			sig, err := newECDSASigner(tc.key, "test", tc.alg)
 			require.NoError(t, err)
 
@@ -336,12 +401,16 @@ func TestECDSAverifierVerifyPayload(t *testing.T) {
 			ver, err := newECDSAVerifier(&tc.key.PublicKey, "test", tc.alg)
 			require.NoError(t, err)
 
-			err = ver.verifyPayload(message, res)
-			require.NoError(t, err)
+			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
 
-			err = ver.verifyPayload([]byte("test"), res)
-			require.Error(t, err)
-			require.ErrorIs(t, err, ErrInvalidSignature)
+			if tc.shouldError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrInvalidSignature)
+
+				return
+			}
+
+			require.NoError(t, err)
 		})
 	}
 }
@@ -404,19 +473,92 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 	pk4096, err := rsa.GenerateKey(rand.Reader, 4096)
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc  string
-		key *rsa.PrivateKey
-		alg SignatureAlgorithm
+	for uc, tc := range map[string]struct {
+		key             *rsa.PrivateKey
+		alg             SignatureAlgorithm
+		mutateMessage   func(t *testing.T, message []byte) []byte
+		mutateSignature func(t *testing.T, signature []byte) []byte
+		shouldError     bool
 	}{
-		{uc: "2048 key with RsaPkcs1v15Sha256", key: pk2048, alg: RsaPkcs1v15Sha256},
-		{uc: "3072 key with RsaPkcs1v15Sha384", key: pk3072, alg: RsaPkcs1v15Sha384},
-		{uc: "4096 key with RsaPkcs1v15Sha512", key: pk4096, alg: RsaPkcs1v15Sha512},
-		{uc: "2048 key with RsaPssSha256", key: pk2048, alg: RsaPssSha256},
-		{uc: "3072 key with RsaPssSha384", key: pk3072, alg: RsaPssSha384},
-		{uc: "4096 key with RsaPssSha512", key: pk4096, alg: RsaPssSha512},
+		"2048 key with RsaPkcs1v15Sha256": {
+			key: pk2048,
+			alg: RsaPkcs1v15Sha256,
+		},
+		"3072 key with RsaPkcs1v15Sha384": {
+			key: pk3072,
+			alg: RsaPkcs1v15Sha384,
+		},
+		"4096 key with RsaPkcs1v15Sha512": {
+			key: pk4096,
+			alg: RsaPkcs1v15Sha512,
+		},
+		"2048 key with RsaPssSha256": {
+			key: pk2048,
+			alg: RsaPssSha256,
+		},
+		"3072 key with RsaPssSha384": {
+			key: pk3072,
+			alg: RsaPssSha384,
+		},
+		"4096 key with RsaPssSha512": {
+			key: pk4096,
+			alg: RsaPssSha512,
+		},
+		"signature is too short": {
+			shouldError: true,
+			alg:         RsaPssSha256,
+			key:         pk2048,
+			mutateSignature: func(t *testing.T, signature []byte) []byte {
+				t.Helper()
+
+				return signature[0 : len(signature)-1]
+			},
+		},
+		"signature is too long": {
+			shouldError: true,
+			alg:         RsaPssSha256,
+			key:         pk2048,
+			mutateSignature: func(t *testing.T, signature []byte) []byte {
+				t.Helper()
+
+				res := make([]byte, len(signature)+1)
+				copy(res, signature)
+
+				return res
+			},
+		},
+		"wrong signature": {
+			shouldError: true,
+			alg:         RsaPssSha256,
+			key:         pk2048,
+			mutateMessage: func(t *testing.T, message []byte) []byte {
+				t.Helper()
+
+				message[0] ^= 0x01
+
+				return message
+			},
+		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
+			mutateMessage := tc.mutateMessage
+			if mutateMessage == nil {
+				mutateMessage = func(t *testing.T, message []byte) []byte {
+					t.Helper()
+
+					return message
+				}
+			}
+
+			mutateSignature := tc.mutateSignature
+			if mutateSignature == nil {
+				mutateSignature = func(t *testing.T, signature []byte) []byte {
+					t.Helper()
+
+					return signature
+				}
+			}
+
 			sig, err := newRSASigner(tc.key, "test", tc.alg)
 			require.NoError(t, err)
 
@@ -427,12 +569,16 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 			ver, err := newRSAVerifier(&tc.key.PublicKey, "test", tc.alg)
 			require.NoError(t, err)
 
-			err = ver.verifyPayload(message, res)
-			require.NoError(t, err)
+			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
 
-			err = ver.verifyPayload([]byte("test"), res)
-			require.Error(t, err)
-			require.ErrorIs(t, err, ErrInvalidSignature)
+			if tc.shouldError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrInvalidSignature)
+
+				return
+			}
+
+			require.NoError(t, err)
 		})
 	}
 }
@@ -488,10 +634,22 @@ func TestEd25519VerifierVerifyPayload(t *testing.T) {
 	ver, err := newEd25519Verifier(pubKey, "test", sig.alg)
 	require.NoError(t, err)
 
+	// valid signature
 	err = ver.verifyPayload(message, res)
 	require.NoError(t, err)
 
+	// invalid signature for the given message
 	err = ver.verifyPayload([]byte("test"), res)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidSignature)
+
+	// too short signature
+	err = ver.verifyPayload(message, res[0:len(res)-1])
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidSignature)
+
+	// too long signature
+	err = ver.verifyPayload(message, append(res, 0x00))
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidSignature)
 }
