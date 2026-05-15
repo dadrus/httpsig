@@ -457,6 +457,7 @@ func TestSignerSign(t *testing.T) {
 				WithTTL(0),
 				WithComponents("@authority", "content-digest", "@query-param;name=\"Pet\""),
 				WithTag("header-example"),
+				WithContentDigestAlgorithm(Sha512),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -498,6 +499,7 @@ func TestSignerSign(t *testing.T) {
 				WithComponents(
 					"date", "@method", "@path", "@query", "@authority", "content-type", "content-digest", "content-length",
 				),
+				WithContentDigestAlgorithm(Sha512),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -537,6 +539,7 @@ func TestSignerSign(t *testing.T) {
 				WithLabel("sig-b24"),
 				WithTTL(0),
 				WithComponents("@status", "content-type", "content-digest", "content-length"),
+				WithContentDigestAlgorithm(Sha512),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,

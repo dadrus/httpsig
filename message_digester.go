@@ -20,11 +20,6 @@ type contentDigester struct {
 }
 
 func (c contentDigester) update(msg *Message) error {
-	if val := msg.Header.Get(headerContentDigest); len(val) != 0 {
-		// header already present. skipping
-		return nil
-	}
-
 	body, err := c.readBody(msg.Body)
 	if err != nil {
 		return err
