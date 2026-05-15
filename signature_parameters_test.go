@@ -566,6 +566,18 @@ func TestSignatureParametersToSignatureBase(t *testing.T) {
 			},
 		},
 		{
+			uc:         "failing for unknown component identifier",
+			components: []string{"@status"},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
+
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorContains(t, err, "@status")
+				assert.Nil(t, sigBase)
+			},
+		},
+		{
 			uc: "allowing same component identifier with different parameters",
 			components: []string{
 				`@query-param;name="Pet"`,
