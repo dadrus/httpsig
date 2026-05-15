@@ -1,0 +1,34 @@
+name: please-release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  create-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: audit
+      - name: Please Release
+        id: create_release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          target-branch: ${{ github.ref_name }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+          skip-github-pull-request: true
+      - name: Please Release PR
+        if: steps.create_release.outputs.release_created == false
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          target-branch: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          skip-github-release: true
