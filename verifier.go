@@ -312,7 +312,7 @@ func (e *expectations) assert(
 
 	if params.expires.Equal(time.Time{}) {
 		if *e.reqExpiresTS {
-			return fmt.Errorf("%w: expected expires parameter not preset", ErrMissingParameter)
+			return fmt.Errorf("%w: expected expires parameter not present", ErrMissingParameter)
 		}
 	} else if now.After(params.expires.Add(e.tolerance)) {
 		return fmt.Errorf("%w: signature expired", ErrValidity)
@@ -320,7 +320,7 @@ func (e *expectations) assert(
 
 	if params.created.Equal(time.Time{}) {
 		if *e.reqCreatedTS {
-			return fmt.Errorf("%w: expected created parameter not preset", ErrMissingParameter)
+			return fmt.Errorf("%w: expected created parameter not present", ErrMissingParameter)
 		}
 	} else {
 		if now.Before(params.created.Add(-1 * e.tolerance)) {
