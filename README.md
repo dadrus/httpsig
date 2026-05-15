@@ -116,7 +116,7 @@ Both the `Signer` and `Verifier` respect the `"content-digest"` component identi
 
 The library not only supports signing and verifying HTTP messages but also facilitates signature negotiation, as defined in the [RFC 9421 HTTP Message Signatures - Requesting Signatures](https://www.rfc-editor.org/rfc/rfc9421.html#name-requesting-signatures), by utilizing the `"Accept-Signature"` header.
 
-> [!IMPORTANT]  
+> [!NOTE]  
 > While [Chapter 5.2 - Processing an Accept-Signature](https://www.rfc-editor.org/rfc/rfc9421.html#name-processing-an-accept-signat) of the RFC mandates that 
 > 
 > > ... a target message MUST have the same label ...
@@ -207,5 +207,5 @@ if errors.As(err, &missingSigErr) {
 // further error handling
 ```
 
-> [!IMPORTANT]  
+> [!NOTE]  
 > The `WithSignatureNegotiation` option at the top level (outside the `WithRequiredTag` option) is mutually exclusive with the `WithValidateAllSignatures` option. However, you can still use `WithSignatureNegotiation` at the top level if you want to apply the same configuration for all expected tagged signatures, thereby simplifying your code.
