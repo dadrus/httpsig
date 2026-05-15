@@ -292,6 +292,7 @@ func (e *expectations) assert(
 	)
 
 	nonce := NonceValue{}
+
 	nonceValue, noncePresent := params.Params.Get(string(Nonce))
 	if noncePresent {
 		nonce.Value = nonceValue.(string) //nolint: forcetypeassert

@@ -127,6 +127,7 @@ func TestNewSerializer(t *testing.T) {
 				t.Helper()
 
 				require.NoError(t, err)
+
 				ser, ok := s.(*strictSerializer)
 				require.True(t, ok)
 				assert.Equal(t, "foo", ser.key)
