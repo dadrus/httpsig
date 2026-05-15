@@ -145,8 +145,20 @@ func (p *signatureParameters) toSignatureBase(msg *Message) ([]byte, error) {
 	}
 
 	sigBase := make(componentList, 0, len(p.identifiers))
+	seen := make(map[string]struct{}, len(p.identifiers))
 
 	for _, ci := range p.identifiers {
+		identifier, err := httpsfv.Marshal(ci.Item)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := seen[identifier]; ok {
+			return nil, fmt.Errorf("%w: duplicate component identifier %s", ErrMalformedData, identifier)
+		}
+
+		seen[identifier] = struct{}{}
+
 		comp, err := ci.createComponent(msg)
 		if err != nil {
 			return nil, err

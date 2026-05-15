@@ -488,7 +488,7 @@ func TestSignatureParametersToSignatureBase(t *testing.T) {
 	// test is based on the non-normative example from
 	// https://www.rfc-editor.org/rfc/rfc9421.html#name-creating-the-signature-base
 
-	reqURL, err := url.Parse("http://example.com/foo?param=Value&Pet=dog")
+	reqURL, err := url.Parse("http://example.com/foo?param=Value&Pet=dog&Cat=meow")
 	require.NoError(t, err)
 
 	msg := &Message{
@@ -506,7 +506,26 @@ func TestSignatureParametersToSignatureBase(t *testing.T) {
 		IsRequest:  true,
 	}
 
-	expectedSigBase := `"@method": POST
+	keyID := "test-key-rsa-pss"
+	created, err := time.Parse(time.RFC1123, "Tue, 20 Apr 2021 02:07:53 GMT")
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		uc         string
+		components []string
+		assert     func(t *testing.T, err error, sigBase []byte)
+	}{
+		{
+			uc: "successful signature base creation",
+			components: []string{
+				"@method", "@authority", "@path", "content-digest", "content-length", "content-type",
+			},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				expected := `"@method": POST
 "@authority": example.com
 "@path": /foo
 "content-digest": sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
@@ -514,19 +533,78 @@ func TestSignatureParametersToSignatureBase(t *testing.T) {
 "content-type": application/json
 "@signature-params": ("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884473;keyid="test-key-rsa-pss"`
 
-	identifiers, err := toComponentIdentifiers([]string{
-		"@method", "@authority", "@path", "content-digest", "content-length", "content-type",
-	})
-	require.NoError(t, err)
+				assert.Equal(t, expected, string(sigBase))
+			},
+		},
+		{
+			uc: "failing for duplicate component identifier",
+			components: []string{
+				"@method", "@method",
+			},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
 
-	keyID := "test-key-rsa-pss"
-	created, err := time.Parse(time.RFC1123, "Tue, 20 Apr 2021 02:07:53 GMT")
-	require.NoError(t, err)
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrMalformedData)
+				require.ErrorContains(t, err, "duplicate component identifier")
+				assert.Nil(t, sigBase)
+			},
+		},
+		{
+			uc: "failing for duplicate parameterized component identifier",
+			components: []string{
+				`@query-param;name="Pet"`,
+				`@query-param;name="Pet"`,
+			},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
 
-	params := newSignatureParameters(created, time.Time{}, "", keyID, "", "", identifiers)
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrMalformedData)
+				require.ErrorContains(t, err, "duplicate component identifier")
+				assert.Nil(t, sigBase)
+			},
+		},
+		{
+			uc:         "failing for unknown component identifier",
+			components: []string{"@status"},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
 
-	sigBase, err := params.toSignatureBase(msg)
-	require.NoError(t, err)
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorContains(t, err, "@status")
+				assert.Nil(t, sigBase)
+			},
+		},
+		{
+			uc: "allowing same component identifier with different parameters",
+			components: []string{
+				`@query-param;name="Pet"`,
+				`@query-param;name="Cat"`,
+			},
+			assert: func(t *testing.T, err error, sigBase []byte) {
+				t.Helper()
 
-	assert.Equal(t, expectedSigBase, string(sigBase))
+				require.NoError(t, err)
+
+				expected := `"@query-param";name="Pet": dog
+"@query-param";name="Cat": meow
+"@signature-params": ("@query-param";name="Pet" "@query-param";name="Cat");created=1618884473;keyid="test-key-rsa-pss"`
+
+				assert.Equal(t, expected, string(sigBase))
+			},
+		},
+	} {
+		t.Run(tc.uc, func(t *testing.T) {
+			identifiers, err := toComponentIdentifiers(tc.components)
+			require.NoError(t, err)
+
+			params := newSignatureParameters(created, time.Time{}, "", keyID, "", "", identifiers)
+
+			sigBase, err := params.toSignatureBase(msg)
+
+			tc.assert(t, err, sigBase)
+		})
+	}
 }
