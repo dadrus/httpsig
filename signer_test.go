@@ -638,6 +638,90 @@ func TestSignerSign(t *testing.T) {
 				assert.Equal(t, "sig-b26=:wqcAqbmYJ2ji2glfAMaRy4gruYYnx2nEFN2HN6jrnDnQCK1u02Gb04v9EDgwUPiu4A0w6vuQv5lIp5WPpBKRCw==:", sig)
 			},
 		},
+		{
+			uc:  "overwrites stale content-digest when signing content-digest component",
+			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			opts: []SignerOption{
+				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
+				WithLabel("sig-content-digest"),
+				WithTTL(0),
+				WithComponents("content-digest"),
+				WithContentDigestAlgorithm(Sha256),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":           []string{"example.com"},
+					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+					"Content-Type":   []string{"application/json"},
+					"Content-Digest": []string{"sha-256=:stale:"},
+					"Content-Length": []string{"18"},
+				},
+				IsRequest: true,
+				Body: func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(`{"hello": "world"}`)), nil
+				},
+			},
+			assert: func(t *testing.T, err error, header http.Header) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				assert.Equal(
+					t,
+					"sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:",
+					header.Get("Content-Digest"),
+				)
+
+				sigInput := header.Get("Signature-Input")
+				assert.Equal(t, `sig-content-digest=("content-digest");created=1618884473;keyid="test-key-rsa-pss"`, sigInput)
+
+				sig := header.Get("Signature")
+				assert.True(t, strings.HasPrefix(sig, "sig-content-digest=:"))
+			},
+		},
+		{
+			uc:  "preserves existing content-digest when content-digest component is not signed",
+			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			opts: []SignerOption{
+				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
+				WithLabel("sig-no-content-digest"),
+				WithTTL(0),
+				WithComponents("date", "@method"),
+				WithContentDigestAlgorithm(Sha256),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Host":           []string{"example.com"},
+					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+					"Content-Type":   []string{"application/json"},
+					"Content-Digest": []string{"sha-256=:stale:"},
+					"Content-Length": []string{"18"},
+				},
+				IsRequest: true,
+				Body: func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(`{"hello": "world"}`)), nil
+				},
+			},
+			assert: func(t *testing.T, err error, header http.Header) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				assert.Equal(t, "sha-256=:stale:", header.Get("Content-Digest"))
+
+				sigInput := header.Get("Signature-Input")
+				assert.Equal(t, `sig-no-content-digest=("date" "@method");created=1618884473;keyid="test-key-rsa-pss"`, sigInput)
+
+				sig := header.Get("Signature")
+				assert.True(t, strings.HasPrefix(sig, "sig-no-content-digest=:"))
+			},
+		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			s, err := NewSigner(tc.key, tc.opts...)

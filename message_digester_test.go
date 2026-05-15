@@ -258,6 +258,62 @@ func TestContentDigesterUpdate(t *testing.T) {
 				})
 			},
 		},
+		{
+			uc:  "replaces existing content-digest values",
+			alg: Sha256,
+			msg: func() *Message {
+				req, err := http.NewRequestWithContext(
+					context.TODO(),
+					http.MethodPost,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
+				require.NoError(t, err)
+
+				req.Header.Add("Content-Digest", "sha-256=:stale-sha256:")
+				req.Header.Add("Content-Digest", "sha-512=:stale-sha512:")
+
+				return MessageFromRequest(req)
+			}(),
+			assert: func(t *testing.T, err error, msg *Message) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				require.Equal(t, []string{
+					"sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:",
+				}, msg.Header.Values("Content-Digest"))
+			},
+		},
+		{
+			uc: "replaces existing content-digest values without specified algorithm",
+			msg: func() *Message {
+				req, err := http.NewRequestWithContext(
+					context.TODO(),
+					http.MethodPost,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
+				require.NoError(t, err)
+
+				req.Header.Set("Content-Digest", "sha-256=:stale:")
+
+				return MessageFromRequest(req)
+			}(),
+			assert: func(t *testing.T, err error, msg *Message) {
+				t.Helper()
+
+				require.NoError(t, err)
+
+				values := strings.Split(msg.Header.Get("Content-Digest"), ", ")
+				assert.ElementsMatch(t, values, []string{
+					"sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:",
+					"sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:",
+				})
+
+				assert.NotContains(t, msg.Header.Get("Content-Digest"), "stale")
+			},
+		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			cd := &contentDigester{alg: supportedAlgs[tc.alg], algName: tc.alg}
