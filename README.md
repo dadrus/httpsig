@@ -104,18 +104,19 @@ While the examples demonstrate signing a request and verifying a response, you c
 Both the `Signer` and `Verifier` respect the `"content-digest"` component identifier as highlighted in the [Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#name-message-content) of the RFC. This is handled as follows:
 
 * On the `Signer` side, if `"content-digest"` is configured to be included via the `WithComponents` option and the `WithContentDigestAlgorithm` option is not used, the implementation will calculate a message digest over the body using the `sha-256` and `sha-512` algorithms (the only supported algorithms according to [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)). It will then create or replace the `"Content-Digest"` header with the calculated values in addition to the signature-related headers. If the `WithContentDigestAlgorithm` option is used, the message digest will be calculated using the specified algorithm and the `"Content-Digest"` header will be created or replaced with that value.
-  > [!IMPORTANT]
-  > Signing or verifying `"content-digest"` requires reading the message body. Since request and response bodies may be attacker-controlled input, callers are responsible for enforcing appropriate body size limits before passing messages to this library.
-  >
-  > For server-side request handling, consider using `http.MaxBytesReader`; for other contexts, use `io.LimitedReader` or an equivalent mechanism. The library restores the body after reading it, so it can still be consumed by subsequent handlers, but it does not impose global body size limits on behalf of the application.
 
 * On the `Verifier` side, verification of the corresponding hash values is done by default with no additional configuration required. If the `"Signature-Input"` header value contains a `"content-digest"` component, the implementation expects the `"Content-Digest"` header to be present and uses the supplied algorithm names and values to calculate the digest over the body and compare these values to the received ones. If the `"Content-Digest"` header is missing, references unsupported hash algorithms (only `sha-256` and `sha-512` are supported), or there is a mismatch between the calculated and provided values, the message verification will fail with an error.
+
+> [!IMPORTANT]
+> Signing or verifying `"content-digest"` requires reading the message body. Since request and response bodies may be attacker-controlled input, callers are responsible for enforcing appropriate body size limits before passing messages to this library.
+>
+> For server-side request handling, consider using `http.MaxBytesReader`; for other contexts, use `io.LimitedReader` or an equivalent mechanism. The library restores the body after reading it, so it can still be consumed by subsequent handlers, but it does not impose global body size limits on behalf of the application.
 
 ## Signature Negotiation
 
 The library not only supports signing and verifying HTTP messages but also facilitates signature negotiation, as defined in the [RFC 9421 HTTP Message Signatures - Requesting Signatures](https://www.rfc-editor.org/rfc/rfc9421.html#name-requesting-signatures), by utilizing the `"Accept-Signature"` header.
 
-> [!IMPORTANT]  
+> [!NOTE]  
 > While [Chapter 5.2 - Processing an Accept-Signature](https://www.rfc-editor.org/rfc/rfc9421.html#name-processing-an-accept-signat) of the RFC mandates that 
 > 
 > > ... a target message MUST have the same label ...
@@ -206,5 +207,5 @@ if errors.As(err, &missingSigErr) {
 // further error handling
 ```
 
-> [!IMPORTANT]  
+> [!NOTE]  
 > The `WithSignatureNegotiation` option at the top level (outside the `WithRequiredTag` option) is mutually exclusive with the `WithValidateAllSignatures` option. However, you can still use `WithSignatureNegotiation` at the top level if you want to apply the same configuration for all expected tagged signatures, thereby simplifying your code.
