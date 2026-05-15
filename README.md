@@ -109,7 +109,7 @@ Both the `Signer` and `Verifier` respect the `"content-digest"` component identi
   >
   > For server-side request handling, consider using `http.MaxBytesReader`; for other contexts, use `io.LimitedReader` or an equivalent mechanism. The library restores the body after reading it, so it can still be consumed by subsequent handlers, but it does not impose global body size limits on behalf of the application.
 
-* On the `Verifier` side, verification of the corresponding hash values is done by default with no additional configuration required. If the `"Signature-Input"` header value contains a `"content-digest"` component, the implementation expects the `"Content-Digest"` header to be present and uses the supplied algorithm names and values to calculate the digest over the body and compare these value to the received ones. If the `"Content-Digest"` header is missing, references unsupported hash algorithms (only `sha-256` and `sha-512` are supported), or there is a mismatch between the calculated and provided values, the message verification will fail with an error.
+* On the `Verifier` side, verification of the corresponding hash values is done by default with no additional configuration required. If the `"Signature-Input"` header value contains a `"content-digest"` component, the implementation expects the `"Content-Digest"` header to be present and uses the supplied algorithm names and values to calculate the digest over the body and compare these values to the received ones. If the `"Content-Digest"` header is missing, references unsupported hash algorithms (only `sha-256` and `sha-512` are supported), or there is a mismatch between the calculated and provided values, the message verification will fail with an error.
 
 ## Signature Negotiation
 
