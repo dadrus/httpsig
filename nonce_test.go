@@ -13,7 +13,7 @@ func TestNonceCheckerFuncImplementsNonceChecker(t *testing.T) {
 
 	var checker NonceChecker = NonceCheckerFunc(func(_ context.Context, nonce NonceValue) error {
 		assert.True(t, nonce.Present)
-		assert.Equal(t, nonce.Value, "foo")
+		assert.Equal(t, "foo", nonce.Value)
 
 		return nil
 	})
