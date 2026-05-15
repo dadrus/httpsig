@@ -104,6 +104,7 @@ While the examples demonstrate signing a request and verifying a response, you c
 Both the `Signer` and `Verifier` respect the `"content-digest"` component identifier as highlighted in the [Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#name-message-content) of the RFC. This is handled as follows:
 
 * On the `Signer` side, if `"content-digest"` is configured to be included via the `WithComponents` option and the `WithContentDigestAlgorithm` option is not used, the implementation will calculate a message digest over the body using the `sha-256` and `sha-512` algorithms (the only supported algorithms according to [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)). It will then create or replace the `"Content-Digest"` header with the calculated values in addition to the signature-related headers. If the `WithContentDigestAlgorithm` option is used, the message digest will be calculated using the specified algorithm and the `"Content-Digest"` header will be created or replaced with that value.
+
   > [!IMPORTANT]
   > Signing or verifying `"content-digest"` requires reading the message body. Since request and response bodies may be attacker-controlled input, callers are responsible for enforcing appropriate body size limits before passing messages to this library.
   >
