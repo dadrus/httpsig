@@ -286,15 +286,17 @@ func (e *expectations) assert(
 	nc NonceChecker,
 ) error {
 	var (
-		nonce             string
 		missingComponents []string
 		cmv               compositeMessageVerifier
 		mv                messageVerifier
 	)
 
+	nonce := NonceValue{}
+
 	nonceValue, noncePresent := params.Params.Get(string(Nonce))
 	if noncePresent {
-		nonce = nonceValue.(string) //nolint: forcetypeassert
+		nonce.Value = nonceValue.(string) //nolint: forcetypeassert
+		nonce.Present = true
 	}
 
 	if err := nc.CheckNonce(msg.Context, nonce); err != nil {
