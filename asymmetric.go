@@ -254,7 +254,7 @@ func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 		keyBytes++
 	}
 
-	expectedLen := 2 * keyBytes
+	expectedLen := 2 * keyBytes //nolint:mnd
 	if len(signature) != expectedLen {
 		return ErrInvalidSignature
 	}
