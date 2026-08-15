@@ -3,7 +3,7 @@ module github.com/dadrus/httpsig
 go 1.24.13
 
 require (
-	github.com/dunglas/httpsfv v1.1.0
+	github.com/dunglas/httpsfv v1.1.1
 	github.com/stretchr/testify v1.11.1
 )
 
