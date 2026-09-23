@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.1](https://github.com/dadrus/httpsig/compare/v0.9.0...v0.9.1) (2026-09-23)
+
+
+### Dependencies
+
+* update module github.com/dunglas/httpsfv to v1.1.1 ([#142](https://github.com/dadrus/httpsig/issues/142)) ([8ce5985](https://github.com/dadrus/httpsig/commit/8ce598504af0506c883e6a274adb72db774412af))
+* update module github.com/dunglas/httpsfv to v1.1.2 ([#148](https://github.com/dadrus/httpsig/issues/148)) ([4a9c892](https://github.com/dadrus/httpsig/commit/4a9c892b21eba4e8e50ce3292985106b282754a2))
+* update module github.com/stretchr/testify to v1.12.1 ([#143](https://github.com/dadrus/httpsig/issues/143)) ([95e9f49](https://github.com/dadrus/httpsig/commit/95e9f4901c32b5d169775caa30bedffeba30c4b0))
+
 ## [0.9.0](https://github.com/dadrus/httpsig/compare/v0.8.0...v0.9.0) (2026-05-15)
 
 
