@@ -412,6 +412,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 				t.Helper()
 
 				require.NoError(t, err)
+
 				value, ok := params.Params.Get("foo")
 				require.True(t, ok)
 				assert.Equal(t, 1, value)
