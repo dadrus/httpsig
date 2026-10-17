@@ -399,7 +399,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 			},
 		},
 		{
-			uc: "failing parsing unknown parameter",
+			uc: "preserving unknown signature parameter",
 			list: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
 					params := httpsfv.NewParams()
@@ -408,12 +408,14 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, params *signatureParameters) {
 				t.Helper()
 
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
-				require.ErrorContains(t, err, "foo is unknown")
+				require.NoError(t, err)
+
+				value, ok := params.Params.Get("foo")
+				require.True(t, ok)
+				assert.Equal(t, 1, value)
 			},
 		},
 		{

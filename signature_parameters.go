@@ -128,7 +128,7 @@ func (p *signatureParameters) fromInnerList(list httpsfv.InnerList) error {
 
 			p.tag = value
 		default:
-			return fmt.Errorf("%w: %s is unknown", ErrMalformedSignatureParameter, name)
+			// ignoring unknown parameter
 		}
 	}
 
