@@ -149,7 +149,7 @@ type signer struct {
 }
 
 func (s *signer) Sign(msg *Message) (http.Header, error) {
-	sp, err := s.signatureParameters(msg.Context)
+	params, err := s.signatureParameters(msg.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -158,17 +158,22 @@ func (s *signer) Sign(msg *Message) (http.Header, error) {
 		return nil, err
 	}
 
-	base, err := sp.toSignatureBase(msg)
+	base, err := newSignatureBase(params, msg)
 	if err != nil {
 		return nil, err
 	}
 
-	signature, err := s.ps.signPayload(base)
+	sb, err := base.marshal()
 	if err != nil {
 		return nil, err
 	}
 
-	return msg.addSignature(s.label, signature, sp.InnerList)
+	signature, err := s.ps.signPayload(sb)
+	if err != nil {
+		return nil, err
+	}
+
+	return msg.addSignature(s.label, signature, params.InnerList)
 }
 
 func (s *signer) signatureParameters(ctx context.Context) (*signatureParameters, error) {
