@@ -72,7 +72,7 @@ func (s signatureBase) components() (map[string]string, error) {
 	result := make(map[string]string, len(s))
 
 	for _, component := range s {
-		name := component.key.Value.(string)
+		name := component.key.Value.(string) // nolint: forcetypeassert
 
 		if name == "@signature-params" {
 			continue
