@@ -478,7 +478,7 @@ func (v *verifier) verifySignature(
 	params *signatureParameters,
 	exp *expectations,
 ) error {
-	base, err := params.toSignatureBase(msg)
+	base, err := newSignatureBase(params, msg)
 	if err != nil {
 		return err
 	}
@@ -497,7 +497,12 @@ func (v *verifier) verifySignature(
 		return err
 	}
 
-	return verifier.verifyPayload(base, signature)
+	sb, err := base.marshal()
+	if err != nil {
+		return err
+	}
+
+	return verifier.verifyPayload(sb, signature)
 }
 
 func getSignatureReferences(values []string) (map[string]*signatureParameters, error) {
