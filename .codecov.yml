@@ -1,0 +1,14 @@
+ignore:
+  - "**/*generated.go"
+  - "**/mock_*.go"
+  - "**/mocks/**"
+  - "**/*_test.go"
+  - "**/testsupport/**"
+  - "**/zz_generated.*"
+coverage:
+  status:
+    patch: off
+    project:
+      default:
+        # allow test coverage to drop by 1%
+        threshold: 1
