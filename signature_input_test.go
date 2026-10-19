@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewSignatureParameters(t *testing.T) {
+func TestNewSignatureInput(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -21,11 +21,11 @@ func TestNewSignatureParameters(t *testing.T) {
 		tag         string
 		algorithm   SignatureAlgorithm
 		identifiers []*componentIdentifier
-		assert      func(t *testing.T, params *signatureParameters)
+		assert      func(t *testing.T, params *signatureInput)
 	}{
 		{
 			uc: "without any parameters",
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -44,7 +44,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:      "with created only",
 			created: time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				expCreated := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -68,7 +68,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:      "with expires only",
 			expires: time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				expExpires := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -92,7 +92,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:    "with nonce only",
 			nonce: "test",
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -114,7 +114,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:    "with keyid only",
 			keyID: "test",
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -136,7 +136,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:  "with tag only",
 			tag: "test",
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -158,7 +158,7 @@ func TestNewSignatureParameters(t *testing.T) {
 		{
 			uc:        "with algorithm only",
 			algorithm: RsaPssSha384,
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -182,7 +182,7 @@ func TestNewSignatureParameters(t *testing.T) {
 			identifiers: []*componentIdentifier{{
 				Item: httpsfv.Item{Value: "test"},
 			}},
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				require.NotNil(t, params)
@@ -210,7 +210,7 @@ func TestNewSignatureParameters(t *testing.T) {
 			identifiers: []*componentIdentifier{{
 				Item: httpsfv.Item{Value: "test"},
 			}},
-			assert: func(t *testing.T, params *signatureParameters) {
+			assert: func(t *testing.T, params *signatureInput) {
 				t.Helper()
 
 				expCreated := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -260,27 +260,27 @@ func TestNewSignatureParameters(t *testing.T) {
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			params := newSignatureParameters(tc.created, tc.expires, tc.nonce, tc.keyID, tc.tag, tc.algorithm, tc.identifiers)
+			params := newSignatureInput(tc.created, tc.expires, tc.nonce, tc.keyID, tc.tag, tc.algorithm, tc.identifiers)
 
 			tc.assert(t, params)
 		})
 	}
 }
 
-func TestSignatureParametersFromInnerList(t *testing.T) {
+func TestSignatureInputFromInnerList(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		uc     string
 		list   httpsfv.InnerList
-		assert func(t *testing.T, err error, params *signatureParameters)
+		assert func(t *testing.T, err error, params *signatureInput)
 	}{
 		{
 			uc: "failing create component identifier",
 			list: httpsfv.InnerList{
 				Items: []httpsfv.Item{{Value: "@test"}},
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -298,7 +298,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -316,7 +316,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -334,7 +334,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -352,7 +352,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -370,7 +370,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -388,7 +388,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureParameters) {
+			assert: func(t *testing.T, err error, _ *signatureInput) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -406,7 +406,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, params *signatureParameters) {
+			assert: func(t *testing.T, err error, params *signatureInput) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 				Items:  []httpsfv.Item{{Value: "test", Params: httpsfv.NewParams()}},
 				Params: httpsfv.NewParams(),
 			},
-			assert: func(t *testing.T, err error, params *signatureParameters) {
+			assert: func(t *testing.T, err error, params *signatureInput) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -453,7 +453,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, params *signatureParameters) {
+			assert: func(t *testing.T, err error, params *signatureInput) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -473,7 +473,7 @@ func TestSignatureParametersFromInnerList(t *testing.T) {
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			var params signatureParameters
+			var params signatureInput
 
 			err := params.fromInnerList(tc.list)
 

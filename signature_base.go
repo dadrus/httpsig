@@ -10,7 +10,7 @@ import (
 
 type signatureBase []component
 
-func newSignatureBase(params *signatureParameters, msg *Message) (signatureBase, error) {
+func newSignatureBase(params *signatureInput, msg *Message) (signatureBase, error) {
 	marshalledSigParams, err := httpsfv.Marshal(params.InnerList)
 	if err != nil {
 		return nil, err

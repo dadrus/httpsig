@@ -132,7 +132,7 @@ func TestNewSignatureBase(t *testing.T) {
 			identifiers, err := toComponentIdentifiers(tc.components)
 			require.NoError(t, err)
 
-			params := newSignatureParameters(created, time.Time{}, "", keyID, "", "", identifiers)
+			params := newSignatureInput(created, time.Time{}, "", keyID, "", "", identifiers)
 
 			sigBase, err := newSignatureBase(params, msg)
 

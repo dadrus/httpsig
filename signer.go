@@ -176,7 +176,7 @@ func (s *signer) Sign(msg *Message) (http.Header, error) {
 	return msg.addSignature(s.label, signature, params.InnerList)
 }
 
-func (s *signer) signatureParameters(ctx context.Context) (*signatureParameters, error) {
+func (s *signer) signatureParameters(ctx context.Context) (*signatureInput, error) {
 	var (
 		created time.Time
 		expires time.Time
@@ -194,7 +194,7 @@ func (s *signer) signatureParameters(ctx context.Context) (*signatureParameters,
 		return nil, err
 	}
 
-	return newSignatureParameters(
+	return newSignatureInput(
 		created,
 		expires,
 		nonce,

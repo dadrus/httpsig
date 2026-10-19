@@ -8,7 +8,7 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-type signatureParameters struct {
+type signatureInput struct {
 	httpsfv.InnerList
 
 	created     time.Time
@@ -20,12 +20,12 @@ type signatureParameters struct {
 	identifiers []*componentIdentifier
 }
 
-func newSignatureParameters(
+func newSignatureInput(
 	created, expires time.Time,
 	nonce, keyID, signatureTag string,
 	algorithm SignatureAlgorithm,
 	identifiers []*componentIdentifier,
-) *signatureParameters {
+) *signatureInput {
 	// https://www.rfc-editor.org/rfc/rfc9421.html#name-signature-parameters
 	params := httpsfv.NewParams()
 
@@ -58,7 +58,7 @@ func newSignatureParameters(
 		items[i] = id.Item
 	}
 
-	return &signatureParameters{
+	return &signatureInput{
 		InnerList:   httpsfv.InnerList{Params: params, Items: items},
 		created:     created,
 		expires:     expires,
@@ -71,7 +71,7 @@ func newSignatureParameters(
 }
 
 //nolint:funlen, cyclop
-func (p *signatureParameters) fromInnerList(list httpsfv.InnerList) error {
+func (p *signatureInput) fromInnerList(list httpsfv.InnerList) error {
 	for _, item := range list.Items {
 		ci, err := newComponentIdentifier(item)
 		if err != nil {
@@ -138,7 +138,7 @@ func (p *signatureParameters) fromInnerList(list httpsfv.InnerList) error {
 	return nil
 }
 
-func (p *signatureParameters) hasIdentifier(id *componentIdentifier) bool {
+func (p *signatureInput) hasIdentifier(id *componentIdentifier) bool {
 	for _, identifier := range p.identifiers {
 		if identifier.Value == id.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
 			return true

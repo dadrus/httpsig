@@ -280,7 +280,7 @@ type expectations struct {
 
 //nolint:cyclop
 func (e *expectations) assert(
-	params *signatureParameters,
+	params *signatureInput,
 	msg *Message,
 	keyAlg SignatureAlgorithm,
 	nc NonceChecker,
@@ -415,7 +415,7 @@ func (v *verifier) Verify(msg *Message) error {
 	return nil
 }
 
-func (v *verifier) applicableSignatures(refs map[string]*signatureParameters) (map[string]*signatureParameters, error) {
+func (v *verifier) applicableSignatures(refs map[string]*signatureInput) (map[string]*signatureInput, error) {
 	for name, params := range refs {
 		if !v.isApplicable(params.tag) {
 			delete(refs, name)
@@ -446,7 +446,7 @@ func (v *verifier) negotiateSignatureParameters(msg *Message) error {
 	return &NoApplicableSignatureError{headerToAdd: hdr}
 }
 
-func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureParameters) bool {
+func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureInput) bool {
 	for sigTag := range v.tagExpectations {
 		if len(sigTag) == 0 {
 			// empty tag is used for expectations for all signatures
@@ -475,7 +475,7 @@ func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureParameters)
 func (v *verifier) verifySignature(
 	msg *Message,
 	signature []byte,
-	params *signatureParameters,
+	params *signatureInput,
 	exp *expectations,
 ) error {
 	base, err := newSignatureBase(params, msg)
@@ -505,16 +505,16 @@ func (v *verifier) verifySignature(
 	return verifier.verifyPayload(sb, signature)
 }
 
-func getSignatureReferences(values []string) (map[string]*signatureParameters, error) {
+func getSignatureReferences(values []string) (map[string]*signatureInput, error) {
 	inputDict, err := httpsfv.UnmarshalDictionary(values)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
 	}
 
-	sigRefs := make(map[string]*signatureParameters, len(inputDict.Names()))
+	sigRefs := make(map[string]*signatureInput, len(inputDict.Names()))
 
 	for _, label := range inputDict.Names() {
-		var sp signatureParameters
+		var sp signatureInput
 
 		m, _ := inputDict.Get(label)
 
