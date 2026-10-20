@@ -2,7 +2,6 @@ package httpsig
 
 import (
 	"bufio"
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,7 +23,12 @@ func TestContentDigesterVerify(t *testing.T) {
 		{
 			uc: "malformed content-digest header",
 			msg: func() *Message {
-				req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				req.Header.Set("content-digest", ",")
 
 				return MessageFromRequest(req)
@@ -40,7 +44,12 @@ func TestContentDigesterVerify(t *testing.T) {
 		{
 			uc: "invalid digest value format",
 			msg: func() *Message {
-				req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				req.Header.Set("content-digest", "sha-256")
 
 				return MessageFromRequest(req)
@@ -56,7 +65,12 @@ func TestContentDigesterVerify(t *testing.T) {
 		{
 			uc: "unknown algorithm",
 			msg: func() *Message {
-				req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				req.Header.Set("content-digest", "md5=:eyJoZWxsbyI6ICJ3b3JsZCJ9:")
 
 				return MessageFromRequest(req)
@@ -71,7 +85,12 @@ func TestContentDigesterVerify(t *testing.T) {
 		{
 			uc: "digest mismatch",
 			msg: func() *Message {
-				req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				req.Header.Set("content-digest", "sha-256=:eyJoZWxsbyI6ICJ3b3JsZCJ9:")
 
 				return MessageFromRequest(req)
@@ -86,7 +105,12 @@ func TestContentDigesterVerify(t *testing.T) {
 		{
 			uc: "successful request digest verification",
 			msg: func() *Message {
-				req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				req.Header.Set("content-digest", "sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:")
 
 				return MessageFromRequest(req)
@@ -108,8 +132,12 @@ Content-Length: 23
 
 {"message": "good dog"}
 `
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, "http://example.com/foo",
-					strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 
 				resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(responseWithBody)), req) //nolint:bodyclose
@@ -134,8 +162,12 @@ Content-Length: 23
 
 {"message": "good dog"}
 `
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, "http://example.com/foo",
-					strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 				req.Header.Set("content-digest", "sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:")
 
@@ -175,7 +207,7 @@ func TestContentDigesterUpdate(t *testing.T) {
 			alg: Sha256,
 			msg: func() *Message {
 				req, err := http.NewRequestWithContext(
-					context.TODO(),
+					t.Context(),
 					http.MethodGet,
 					"http://example.com/foo",
 					strings.NewReader(`{"hello": "world"}`),
@@ -197,7 +229,7 @@ func TestContentDigesterUpdate(t *testing.T) {
 			uc: "digest for client-side request without specified algorithm",
 			msg: func() *Message {
 				req, err := http.NewRequestWithContext(
-					context.TODO(),
+					t.Context(),
 					http.MethodGet,
 					"http://example.com/foo",
 					strings.NewReader(`{"hello": "world"}`),
@@ -222,8 +254,12 @@ func TestContentDigesterUpdate(t *testing.T) {
 			uc:  "digest for server-side response with specifying algorithm",
 			alg: Sha512,
 			msg: func() *Message {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, "http://example.com/foo",
-					strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 
 				return MessageForResponse(req, make(http.Header), []byte(`{"message": "good dog"}`), http.StatusOK)
@@ -240,8 +276,12 @@ func TestContentDigesterUpdate(t *testing.T) {
 		{
 			uc: "digest for server-side response without specifying algorithm",
 			msg: func() *Message {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, "http://example.com/foo",
-					strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com/foo",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 
 				return MessageForResponse(req, make(http.Header), []byte(`{"message": "good dog"}`), http.StatusOK)
@@ -263,7 +303,7 @@ func TestContentDigesterUpdate(t *testing.T) {
 			alg: Sha256,
 			msg: func() *Message {
 				req, err := http.NewRequestWithContext(
-					context.TODO(),
+					t.Context(),
 					http.MethodPost,
 					"http://example.com/foo",
 					strings.NewReader(`{"hello": "world"}`),
@@ -289,7 +329,7 @@ func TestContentDigesterUpdate(t *testing.T) {
 			uc: "replaces existing content-digest values without specified algorithm",
 			msg: func() *Message {
 				req, err := http.NewRequestWithContext(
-					context.TODO(),
+					t.Context(),
 					http.MethodPost,
 					"http://example.com/foo",
 					strings.NewReader(`{"hello": "world"}`),
