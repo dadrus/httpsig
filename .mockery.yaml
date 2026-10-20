@@ -1,2 +1,13 @@
-case: underscore
-with-expecter: true
+template: testify
+filename: "mock_{{ snakecase .InterfaceName | lower }}_test.go"
+structname: "{{ firstUpper .InterfaceName }}Mock"
+dir: "{{ .InterfaceDir }}"
+pkgname: "{{ .SrcPackageName }}"
+template-data:
+  unroll-variadic: true
+packages:
+  github.com/dadrus/httpsig:
+    interfaces:
+      NonceGetter: {}
+      NonceChecker: {}
+      KeyResolver: {}
