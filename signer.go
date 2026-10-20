@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/dunglas/httpsfv"
 )
 
 type Signer interface {
@@ -149,7 +151,7 @@ type signer struct {
 }
 
 func (s *signer) Sign(msg *Message) (http.Header, error) {
-	params, err := s.signatureParameters(msg.Context)
+	params, err := s.signatureInput(msg.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -173,34 +175,39 @@ func (s *signer) Sign(msg *Message) (http.Header, error) {
 		return nil, err
 	}
 
-	return msg.addSignature(s.label, signature, params.InnerList)
+	return msg.addSignature(s.label, signature, params.value)
 }
 
-func (s *signer) signatureParameters(ctx context.Context) (*signatureParameters, error) {
-	var (
-		created time.Time
-		expires time.Time
-		nonce   string
-		err     error
-	)
+func (s *signer) signatureInput(ctx context.Context) (*signatureInput, error) {
+	created := currentTime().UTC()
 
-	created = currentTime().UTC()
-	if s.ttl > 0 {
-		expires = created.Add(s.ttl)
-	}
-
-	nonce, err = s.ng.GetNonce(ctx)
+	nonce, err := s.ng.GetNonce(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return newSignatureParameters(
-		created,
-		expires,
-		nonce,
-		s.ps.keyID(),
-		s.tag,
-		filterAlgorithm(s.ps.algorithm()),
-		s.ids,
-	), nil
+	params := httpsfv.NewParams()
+	params.Add(string(Created), created.Unix())
+
+	if s.ttl > 0 {
+		params.Add(string(Expires), created.Add(s.ttl).Unix())
+	}
+
+	if keyID := s.ps.keyID(); keyID != "" {
+		params.Add(string(KeyID), keyID)
+	}
+
+	if alg := filterAlgorithm(s.ps.algorithm()); alg != "" {
+		params.Add(string(Alg), string(alg))
+	}
+
+	if len(nonce) != 0 {
+		params.Add(string(Nonce), nonce)
+	}
+
+	if len(s.tag) != 0 {
+		params.Add(string(Tag), s.tag)
+	}
+
+	return newSignatureInput(s.ids, params), nil
 }

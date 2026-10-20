@@ -411,17 +411,15 @@ func TestExpectationsAssertParameters(t *testing.T) {
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			var params signatureParameters
-
 			msg := &Message{Context: context.TODO()}
 
-			err := params.fromInnerList(tc.params)
+			si, err := parseSignatureInput(tc.params)
 			require.NoError(t, err)
 
 			nc := NewNonceCheckerMock(t)
 			tc.configure(t, nc)
 
-			err = tc.exp.assert(&params, msg, tc.expAlg, nc)
+			err = tc.exp.assert(si, msg, tc.expAlg, nc)
 
 			tc.assert(t, err)
 		})
@@ -1555,6 +1553,69 @@ func TestVerifierVerify(t *testing.T) {
 				require.NoError(t, err)
 			},
 		},
+		{
+			uc: "invalid untagged signature is ignored",
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Header: http.Header{
+					"Signature-Input": []string{
+						`valid=();created=1618884473;keyid="test-shared-secret";tag="foo", ` +
+							`invalid=();created=1618884473;keyid="test-shared-secret"`,
+					},
+					"Signature": []string{
+						`valid=:VhBIZ0nP4o+r4bSKCvC+gc0VI1yVhhN1PECWW8ZF2Dg=:, ` +
+							`invalid=:dGVzdA==:`,
+					},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
+					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
+				).Once()
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "invalid untagged signature fails when validating all",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Header: http.Header{
+					"Signature-Input": []string{
+						`valid=();created=1618884473;keyid="test-shared-secret";tag="foo", ` +
+							`invalid=();created=1618884473;keyid="test-shared-secret"`,
+					},
+					"Signature": []string{
+						`valid=:VhBIZ0nP4o+r4bSKCvC+gc0VI1yVhhN1PECWW8ZF2Dg=:, ` +
+							`invalid=:dGVzdA==:`,
+					},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
+					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
+				)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrInvalidSignature)
+			},
+		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			kr := NewKeyResolverMock(t)
@@ -1565,6 +1626,128 @@ func TestVerifierVerify(t *testing.T) {
 
 			err = v.Verify(tc.msg)
 			tc.assert(t, err)
+		})
+	}
+}
+
+func TestVerifierApplicableSignatures(t *testing.T) {
+	t.Parallel()
+
+	withTag := func(tag string) *signatureInput {
+		params := httpsfv.NewParams()
+		params.Add(string(Tag), tag)
+
+		return newSignatureInput(nil, params)
+	}
+
+	for uc, tc := range map[string]struct {
+		verifier verifier
+		refs     map[string]*signatureInput
+		assert   func(t *testing.T, err error, refs map[string]*signatureInput)
+	}{
+		"only required signatures are applicable": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"matching": withTag("foo"),
+				"other":    withTag("bar"),
+				"empty":    withTag(""),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, refs, 1)
+				assert.Contains(t, refs, "matching")
+			},
+		},
+		"no matching signature": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"other": withTag("bar"),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+		"missing tag": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+		"all signatures are applicable": {
+			verifier: verifier{
+				validateAllSigs: true,
+			},
+			refs: map[string]*signatureInput{
+				"tagged":   withTag("foo"),
+				"empty":    withTag(""),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Len(t, refs, 3)
+				assert.Contains(t, refs, "tagged")
+				assert.Contains(t, refs, "empty")
+				assert.Contains(t, refs, "untagged")
+			},
+		},
+		"validate all with required tag": {
+			verifier: verifier{
+				validateAllSigs: true,
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"matching": withTag("foo"),
+				"other":    withTag("bar"),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Len(t, refs, 3)
+				assert.Contains(t, refs, "matching")
+				assert.Contains(t, refs, "other")
+				assert.Contains(t, refs, "untagged")
+			},
+		},
+		"no signatures": {
+			verifier: verifier{
+				validateAllSigs: true,
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			v := tc.verifier
+
+			refs, err := v.applicableSignatures(tc.refs)
+
+			tc.assert(t, err, refs)
 		})
 	}
 }

@@ -278,9 +278,9 @@ type expectations struct {
 	reqExpiresTS *bool
 }
 
-//nolint:cyclop
+// nolint: funlen, cyclop
 func (e *expectations) assert(
-	params *signatureParameters,
+	si *signatureInput,
 	msg *Message,
 	keyAlg SignatureAlgorithm,
 	nc NonceChecker,
@@ -293,9 +293,9 @@ func (e *expectations) assert(
 
 	nonce := NonceValue{}
 
-	nonceValue, noncePresent := params.Params.Get(string(Nonce))
+	nonceValue, noncePresent := si.nonce()
 	if noncePresent {
-		nonce.Value = nonceValue.(string) //nolint: forcetypeassert
+		nonce.Value = nonceValue
 		nonce.Present = true
 	}
 
@@ -303,37 +303,40 @@ func (e *expectations) assert(
 		return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
 	}
 
-	if len(params.alg) != 0 && params.alg != keyAlg {
+	algorithm, algPresent := si.algorithm()
+	if algPresent && algorithm != keyAlg {
 		return fmt.Errorf("%w: key algorithm %s does not match signature algorithm %s",
-			ErrParameter, params.alg, keyAlg)
+			ErrParameter, algorithm, keyAlg)
 	}
 
 	now := currentTime().UTC()
 
-	if params.expires.Equal(time.Time{}) {
+	expires, expiresPresent := si.expires()
+	if !expiresPresent {
 		if *e.reqExpiresTS {
 			return fmt.Errorf("%w: expected expires parameter not present", ErrMissingParameter)
 		}
-	} else if now.After(params.expires.Add(e.tolerance)) {
+	} else if now.After(expires.Add(e.tolerance)) {
 		return fmt.Errorf("%w: signature expired", ErrValidity)
 	}
 
-	if params.created.Equal(time.Time{}) {
+	created, createdPresent := si.created()
+	if !createdPresent {
 		if *e.reqCreatedTS {
 			return fmt.Errorf("%w: expected created parameter not present", ErrMissingParameter)
 		}
 	} else {
-		if now.Before(params.created.Add(-1 * e.tolerance)) {
+		if now.Before(created.Add(-1 * e.tolerance)) {
 			return fmt.Errorf("%w: signature not yet valid", ErrValidity)
 		}
 
-		if params.created.Add(e.maxAge).Before(now) {
+		if created.Add(e.maxAge).Before(now) {
 			return fmt.Errorf("%w: signature too old", ErrValidity)
 		}
 	}
 
 	for _, expIdentifier := range e.identifiers {
-		if !params.hasIdentifier(expIdentifier) {
+		if !si.hasIdentifier(expIdentifier) {
 			res, _ := httpsfv.Marshal(expIdentifier)
 			missingComponents = append(missingComponents, res)
 		}
@@ -344,7 +347,7 @@ func (e *expectations) assert(
 			ErrMissingParameter, strings.Join(missingComponents, ", "))
 	}
 
-	for _, id := range params.identifiers {
+	for _, id := range si.identifiers {
 		if id.Value == "content-digest" {
 			_, fromReq := id.Params.Get("req")
 
@@ -392,7 +395,9 @@ func (v *verifier) Verify(msg *Message) error {
 
 	// do the actual verification
 	for name, params := range applicableSignatures {
-		exp, exists := v.tagExpectations[params.tag]
+		tag, _ := params.tag()
+
+		exp, exists := v.tagExpectations[tag]
 		if !exists {
 			exp = v.tagExpectations[""]
 		}
@@ -415,10 +420,19 @@ func (v *verifier) Verify(msg *Message) error {
 	return nil
 }
 
-func (v *verifier) applicableSignatures(refs map[string]*signatureParameters) (map[string]*signatureParameters, error) {
-	for name, params := range refs {
-		if !v.isApplicable(params.tag) {
-			delete(refs, name)
+func (v *verifier) applicableSignatures(refs map[string]*signatureInput) (map[string]*signatureInput, error) {
+	if !v.validateAllSigs {
+		for name, input := range refs {
+			tag, present := input.tag()
+			if !present {
+				delete(refs, name)
+
+				continue
+			}
+
+			if _, required := v.tagExpectations[tag]; !required {
+				delete(refs, name)
+			}
 		}
 	}
 
@@ -446,7 +460,7 @@ func (v *verifier) negotiateSignatureParameters(msg *Message) error {
 	return &NoApplicableSignatureError{headerToAdd: hdr}
 }
 
-func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureParameters) bool {
+func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureInput) bool {
 	for sigTag := range v.tagExpectations {
 		if len(sigTag) == 0 {
 			// empty tag is used for expectations for all signatures
@@ -457,7 +471,8 @@ func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureParameters)
 		var present bool
 
 		for _, sigRef := range sigRefs {
-			if sigRef.tag == sigTag {
+			tag, tagPresent := sigRef.tag()
+			if tagPresent && tag == sigTag {
 				present = true
 
 				break
@@ -475,20 +490,22 @@ func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureParameters)
 func (v *verifier) verifySignature(
 	msg *Message,
 	signature []byte,
-	params *signatureParameters,
+	si *signatureInput,
 	exp *expectations,
 ) error {
-	base, err := newSignatureBase(params, msg)
+	base, err := newSignatureBase(si, msg)
 	if err != nil {
 		return err
 	}
 
-	key, err := v.keyResolver.ResolveKey(msg.Context, params.keyID)
+	keyID, _ := si.keyID()
+
+	key, err := v.keyResolver.ResolveKey(msg.Context, keyID)
 	if err != nil {
 		return err
 	}
 
-	if err = exp.assert(params, msg, key.Algorithm, v.nonceChecker); err != nil {
+	if err = exp.assert(si, msg, key.Algorithm, v.nonceChecker); err != nil {
 		return err
 	}
 
@@ -505,17 +522,15 @@ func (v *verifier) verifySignature(
 	return verifier.verifyPayload(sb, signature)
 }
 
-func getSignatureReferences(values []string) (map[string]*signatureParameters, error) {
+func getSignatureReferences(values []string) (map[string]*signatureInput, error) {
 	inputDict, err := httpsfv.UnmarshalDictionary(values)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
 	}
 
-	sigRefs := make(map[string]*signatureParameters, len(inputDict.Names()))
+	sigRefs := make(map[string]*signatureInput, len(inputDict.Names()))
 
 	for _, label := range inputDict.Names() {
-		var sp signatureParameters
-
 		m, _ := inputDict.Get(label)
 
 		sigParams, ok := m.(httpsfv.InnerList)
@@ -523,11 +538,12 @@ func getSignatureReferences(values []string) (map[string]*signatureParameters, e
 			return nil, fmt.Errorf("%w: unexpected signature parameters format", ErrMalformedData)
 		}
 
-		if err := sp.fromInnerList(sigParams); err != nil {
+		si, err := parseSignatureInput(sigParams)
+		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
 		}
 
-		sigRefs[label] = &sp
+		sigRefs[label] = si
 	}
 
 	return sigRefs, nil
@@ -550,10 +566,4 @@ func (v *verifier) extractSignature(dict *httpsfv.Dictionary, name string) ([]by
 	}
 
 	return signatureBytes, nil
-}
-
-func (v *verifier) isApplicable(tag string) bool {
-	_, hasKey := v.tagExpectations[tag]
-
-	return v.validateAllSigs || hasKey
 }

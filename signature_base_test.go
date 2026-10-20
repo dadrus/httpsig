@@ -132,9 +132,13 @@ func TestNewSignatureBase(t *testing.T) {
 			identifiers, err := toComponentIdentifiers(tc.components)
 			require.NoError(t, err)
 
-			params := newSignatureParameters(created, time.Time{}, "", keyID, "", "", identifiers)
+			params := httpsfv.NewParams()
+			params.Add(string(Created), created.Unix())
+			params.Add(string(KeyID), keyID)
 
-			sigBase, err := newSignatureBase(params, msg)
+			si := newSignatureInput(identifiers, params)
+
+			sigBase, err := newSignatureBase(si, msg)
 
 			tc.assert(t, err, sigBase)
 		})
