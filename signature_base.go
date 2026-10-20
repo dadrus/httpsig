@@ -10,16 +10,16 @@ import (
 
 type signatureBase []component
 
-func newSignatureBase(params *signatureInput, msg *Message) (signatureBase, error) {
-	marshalledSigParams, err := httpsfv.Marshal(params.InnerList)
+func newSignatureBase(si *signatureInput, msg *Message) (signatureBase, error) {
+	marshalledSigParams, err := httpsfv.Marshal(si.value)
 	if err != nil {
 		return nil, err
 	}
 
-	sigBase := make(signatureBase, 0, len(params.identifiers)+1)
-	seen := make(map[string]struct{}, len(params.identifiers))
+	sigBase := make(signatureBase, 0, len(si.identifiers)+1)
+	seen := make(map[string]struct{}, len(si.identifiers))
 
-	for _, ci := range params.identifiers {
+	for _, ci := range si.identifiers {
 		identifier, err := httpsfv.Marshal(ci.Item)
 		if err != nil {
 			return nil, err

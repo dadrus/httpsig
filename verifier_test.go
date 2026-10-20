@@ -411,17 +411,15 @@ func TestExpectationsAssertParameters(t *testing.T) {
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			var params signatureInput
-
 			msg := &Message{Context: context.TODO()}
 
-			err := params.fromInnerList(tc.params)
+			si, err := parseSignatureInput(tc.params)
 			require.NoError(t, err)
 
 			nc := NewNonceCheckerMock(t)
 			tc.configure(t, nc)
 
-			err = tc.exp.assert(&params, msg, tc.expAlg, nc)
+			err = tc.exp.assert(si, msg, tc.expAlg, nc)
 
 			tc.assert(t, err)
 		})
