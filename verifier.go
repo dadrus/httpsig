@@ -18,8 +18,6 @@ type Verifier interface {
 	Verify(msg *Message) error
 }
 
-//go:generate mockery --name KeyResolver --structname KeyResolverMock --inpackage --testonly
-
 // KeyResolver is used to resolve a key id to a verifying key.
 type KeyResolver interface {
 	ResolveKey(ctx context.Context, keyID string) (Key, error)
