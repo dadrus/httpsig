@@ -16,7 +16,6 @@ linters:
     - testpackage
     - tparallel
     - wrapcheck
-    - zerolog6.9lint
     - goconst
     - noinlineerr
     # deprecated
