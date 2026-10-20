@@ -2,7 +2,6 @@ package httpsig
 
 import (
 	"bufio"
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -76,7 +75,12 @@ func TestMessageFromRequest(t *testing.T) {
 		{
 			uc: "outbound request without body",
 			req: func() *http.Request {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, "http://example.com?foo=bar", nil)
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com?foo=bar",
+					nil,
+				)
 				require.NoError(t, err)
 
 				req.Header.Set("X-Foo-Bar", "bar")
@@ -117,7 +121,12 @@ func TestMessageFromRequest(t *testing.T) {
 		{
 			uc: "inbound request without body",
 			req: func() *http.Request {
-				req := httptest.NewRequest(http.MethodPost, "http://example.com?foo=bar", nil)
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodPost,
+					"http://example.com?foo=bar",
+					nil,
+				)
 				req.Header.Set("X-Foo-Bar", "bar")
 
 				return req
@@ -156,8 +165,12 @@ func TestMessageFromRequest(t *testing.T) {
 		{
 			uc: "outbound request with body",
 			req: func() *http.Request {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet,
-					"http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com?foo=bar",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 
 				req.Header.Set("X-Foo-Bar", "bar")
@@ -198,7 +211,10 @@ func TestMessageFromRequest(t *testing.T) {
 		{
 			uc: "inbound request with body",
 			req: func() *http.Request {
-				req := httptest.NewRequest(http.MethodPost, "http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
+				req := httptest.NewRequestWithContext(
+					t.Context(),
+					http.MethodPost,
+					"http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
 				req.Header.Set("X-Foo-Bar", "bar")
 
 				return req
@@ -274,8 +290,12 @@ Content-Length: 23
 		{
 			uc: "response without body",
 			resp: func() *http.Response {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet,
-					"http://example.com?foo=bar", nil)
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com?foo=bar",
+					nil,
+				)
 				require.NoError(t, err)
 				req.Header.Set("X-Foo-Bar", "bar")
 
@@ -334,8 +354,12 @@ Content-Length: 23
 		{
 			uc: "response with body",
 			resp: func() *http.Response {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodPost,
-					"http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodPost,
+					"http://example.com?foo=bar",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 				req.Header.Set("X-Foo-Bar", "bar")
 
@@ -416,8 +440,12 @@ func TestMessageForResponse(t *testing.T) {
 		{
 			uc: "response without body",
 			req: func() *http.Request {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet,
-					"http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodGet,
+					"http://example.com?foo=bar",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 				req.Header.Set("X-Foo-Bar", "bar")
 
@@ -477,8 +505,12 @@ func TestMessageForResponse(t *testing.T) {
 		{
 			uc: "response with body",
 			req: func() *http.Request {
-				req, err := http.NewRequestWithContext(context.TODO(), http.MethodPost,
-					"http://example.com?foo=bar", strings.NewReader(`{"hello": "world"}`))
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodPost,
+					"http://example.com?foo=bar",
+					strings.NewReader(`{"hello": "world"}`),
+				)
 				require.NoError(t, err)
 				req.Header.Set("X-Foo-Bar", "bar")
 
