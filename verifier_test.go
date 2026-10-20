@@ -1553,6 +1553,69 @@ func TestVerifierVerify(t *testing.T) {
 				require.NoError(t, err)
 			},
 		},
+		{
+			uc: "invalid untagged signature is ignored",
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Header: http.Header{
+					"Signature-Input": []string{
+						`valid=();created=1618884473;keyid="test-shared-secret";tag="foo", ` +
+							`invalid=();created=1618884473;keyid="test-shared-secret"`,
+					},
+					"Signature": []string{
+						`valid=:VhBIZ0nP4o+r4bSKCvC+gc0VI1yVhhN1PECWW8ZF2Dg=:, ` +
+							`invalid=:dGVzdA==:`,
+					},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
+					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
+				).Once()
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			uc: "invalid untagged signature fails when validating all",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Header: http.Header{
+					"Signature-Input": []string{
+						`valid=();created=1618884473;keyid="test-shared-secret";tag="foo", ` +
+							`invalid=();created=1618884473;keyid="test-shared-secret"`,
+					},
+					"Signature": []string{
+						`valid=:VhBIZ0nP4o+r4bSKCvC+gc0VI1yVhhN1PECWW8ZF2Dg=:, ` +
+							`invalid=:dGVzdA==:`,
+					},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
+					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
+				)
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrInvalidSignature)
+			},
+		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			kr := NewKeyResolverMock(t)
