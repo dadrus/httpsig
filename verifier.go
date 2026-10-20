@@ -421,10 +421,18 @@ func (v *verifier) Verify(msg *Message) error {
 }
 
 func (v *verifier) applicableSignatures(refs map[string]*signatureInput) (map[string]*signatureInput, error) {
-	for name, params := range refs {
-		tag, tagPresent := params.tag()
-		if tagPresent && !v.isApplicable(tag) {
-			delete(refs, name)
+	if !v.validateAllSigs {
+		for name, input := range refs {
+			tag, present := input.tag()
+			if !present {
+				delete(refs, name)
+
+				continue
+			}
+
+			if _, required := v.tagExpectations[tag]; !required {
+				delete(refs, name)
+			}
 		}
 	}
 
@@ -558,10 +566,4 @@ func (v *verifier) extractSignature(dict *httpsfv.Dictionary, name string) ([]by
 	}
 
 	return signatureBytes, nil
-}
-
-func (v *verifier) isApplicable(tag string) bool {
-	_, hasKey := v.tagExpectations[tag]
-
-	return v.validateAllSigs || hasKey
 }

@@ -1566,3 +1566,125 @@ func TestVerifierVerify(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifierApplicableSignatures(t *testing.T) {
+	t.Parallel()
+
+	withTag := func(tag string) *signatureInput {
+		params := httpsfv.NewParams()
+		params.Add(string(Tag), tag)
+
+		return newSignatureInput(nil, params)
+	}
+
+	for uc, tc := range map[string]struct {
+		verifier verifier
+		refs     map[string]*signatureInput
+		assert   func(t *testing.T, err error, refs map[string]*signatureInput)
+	}{
+		"only required signatures are applicable": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"matching": withTag("foo"),
+				"other":    withTag("bar"),
+				"empty":    withTag(""),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, refs, 1)
+				assert.Contains(t, refs, "matching")
+			},
+		},
+		"no matching signature": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"other": withTag("bar"),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+		"missing tag": {
+			verifier: verifier{
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+		"all signatures are applicable": {
+			verifier: verifier{
+				validateAllSigs: true,
+			},
+			refs: map[string]*signatureInput{
+				"tagged":   withTag("foo"),
+				"empty":    withTag(""),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Len(t, refs, 3)
+				assert.Contains(t, refs, "tagged")
+				assert.Contains(t, refs, "empty")
+				assert.Contains(t, refs, "untagged")
+			},
+		},
+		"validate all with required tag": {
+			verifier: verifier{
+				validateAllSigs: true,
+				tagExpectations: map[string]*expectations{"foo": {}},
+			},
+			refs: map[string]*signatureInput{
+				"matching": withTag("foo"),
+				"other":    withTag("bar"),
+				"untagged": newSignatureInput(nil, nil),
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Len(t, refs, 3)
+				assert.Contains(t, refs, "matching")
+				assert.Contains(t, refs, "other")
+				assert.Contains(t, refs, "untagged")
+			},
+		},
+		"no signatures": {
+			verifier: verifier{
+				validateAllSigs: true,
+			},
+			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
+				t.Helper()
+
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Nil(t, refs)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			v := tc.verifier
+
+			refs, err := v.applicableSignatures(tc.refs)
+
+			tc.assert(t, err, refs)
+		})
+	}
+}
