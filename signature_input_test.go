@@ -710,6 +710,7 @@ func TestSignatureInputTag(t *testing.T) {
 			params: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add(string(Tag), "web-bot-auth")
+
 				return params
 			}(),
 			expected: "web-bot-auth",

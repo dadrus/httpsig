@@ -105,7 +105,7 @@ func (si *signatureInput) stringParameter(name SignatureParameter) (string, bool
 		return "", false
 	}
 
-	return value.(string), true
+	return value.(string), true //nolint: forcetypeassert
 }
 
 func (si *signatureInput) timestamp(name SignatureParameter) (time.Time, bool) {
@@ -114,7 +114,7 @@ func (si *signatureInput) timestamp(name SignatureParameter) (time.Time, bool) {
 		return time.Time{}, false
 	}
 
-	return time.Unix(value.(int64), 0).UTC(), true
+	return time.Unix(value.(int64), 0).UTC(), true //nolint: forcetypeassert
 }
 
 func (si *signatureInput) algorithm() (SignatureAlgorithm, bool) {
