@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/dadrus/httpsig/compare/v0.9.0...v0.10.0) (2026-10-20)
+
+
+### Features
+
+* Supporting arbitrary signature parameters ([#156](https://github.com/dadrus/httpsig/issues/156)) ([c291c6d](https://github.com/dadrus/httpsig/commit/c291c6de11362f3a651b625f040413b92375cb79))
+
+
+### Dependencies
+
+* update golang to v1.26.9 ([#158](https://github.com/dadrus/httpsig/issues/158)) ([d3db29a](https://github.com/dadrus/httpsig/commit/d3db29a894019a6344b13e59d22c4f87b8132edc))
+* update module github.com/dunglas/httpsfv to v1.1.2 ([#148](https://github.com/dadrus/httpsig/issues/148)) ([4a9c892](https://github.com/dadrus/httpsig/commit/4a9c892b21eba4e8e50ce3292985106b282754a2))
+* update module github.com/stretchr/testify to v1.12.1 ([#143](https://github.com/dadrus/httpsig/issues/143)) ([95e9f49](https://github.com/dadrus/httpsig/commit/95e9f4901c32b5d169775caa30bedffeba30c4b0))
+
 ## [0.9.0](https://github.com/dadrus/httpsig/compare/v0.8.0...v0.9.0) (2026-05-15)
 
 
