@@ -15,7 +15,8 @@ To sign an HTTP request, first, create a `Signer` instance using your preferred 
 // Create a signer.
 signer, err := httpsig.NewSigner( 
     // specify a key
-    httpsig.Key{KeyID: "key1", Key: privKey, Algorithm: httpsig.EcdsaP256Sha256}, 
+    httpsig.Key{Material: privKey, Algorithm: httpsig.EcdsaP256Sha256},
+    httpsig.WithKeyID("key1"),
     // specify the required options 
     // duration for which the signature should be valid
     httpsig.WithTTL(5 * time.Second), 
@@ -52,8 +53,8 @@ verifier, err := httpsig.NewVerifier(
     // specify the required options
     // to detect and mitigate replay attacks
     httpsig.WithNonceChecker(nonceChecker),
-    // which components are expected to be protected by a signature
-    httpsig.WithRequiredComponents("@authority", "@method", "x-my-fancy-header"),
+    // which response components are expected to be protected
+    httpsig.WithRequiredComponents("@status", "content-type"),
     // validity time skew
     httpsig.WithValidityTolerance(5 * time.Second),
     // how old a signature is allowed to be
@@ -63,8 +64,11 @@ verifier, err := httpsig.NewVerifier(
 )
 // error handling
 
-// Verify the response
-err := verifier.Verify(httpsig.MessageFromResponse(resp))
+// Verify the response. No partial result is returned on failure.
+verified, err := verifier.Verify(httpsig.MessageFromResponse(resp))
+// Each entry in verified contains the covered components, transmitted
+// signature parameters, and any metadata returned by the key resolver.
+
 // error handling
 
 ```
@@ -91,7 +95,7 @@ verifier, err := httpsig.NewVerifier(
 )
 // error handling goes here
 
-err = verifier.Verify(msg)
+verified, err := verifier.Verify(msg)
 // error handling goes here
 ```
 
@@ -135,8 +139,9 @@ On the client side, you can request the server to sign the response by using the
 ```go
 // create a builder (all options are optional)
 builder, err := httpsig.NewAcceptSignature(
-    // specify which key and key algorithm the server should use for signing the response
-    httpsig.WithExpectedKey(Key{KeyID: "foo", Algorithm: httpsig.EcdsaP256Sha256}), 
+    // request a key ID and signing algorithm
+    httpsig.WithExpectedKeyID("foo"),
+    httpsig.WithExpectedSignatureAlgorithm(httpsig.EcdsaP256Sha256),
     // specify the NonceSource for the nonce to be added 
     httpsig.WithExpectedNonce(nonceSource),
     // specify which label should the server use when creating the response 
@@ -185,8 +190,9 @@ verifier, err := httpsig.NewVerifier(
         // if there is no signature tagged "myapp", or some of the required components or parameters
         // are not present, request a signature from the client
         httpsig.WithSignatureNegotiation(
-            // specify which key and algorithm the client should use
-            httpsig.WithRequestedKey(httpsig.Key{KeyID: "key1", Algorithm: httpsig.EcdsaP256Sha256}),
+            // request a key ID and signature algorithm
+            httpsig.WithRequestedKeyID("key1"),
+            httpsig.WithRequestedSignatureAlgorithm(httpsig.EcdsaP256Sha256),
             // specify the source for the nonce, the client should use
             httpsig.WithRequestedNonce(nonceGetter),
             // specify the label for the signature, the client should use
@@ -196,7 +202,7 @@ verifier, err := httpsig.NewVerifier(
 )
 // error handling goes here
 
-err = verifier.Verify(msg)
+_, err = verifier.Verify(msg)
 
 var missingSigErr *httpsig.NoApplicableSignatureError
 if errors.As(err, &missingSigErr) {
