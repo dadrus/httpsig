@@ -226,6 +226,16 @@ func TestNewSigner(t *testing.T) {
 			},
 		},
 		{
+			uc:   "alg parameter requires a registered algorithm",
+			key:  Key{Algorithm: HmacSha384, Material: []byte("secret")},
+			opts: []SignerOption{WithAlg()},
+			assert: func(t *testing.T, err error, _ Signer) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+			},
+		},
+		{
 			uc:  "successful without configuration",
 			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			assert: func(t *testing.T, err error, sgnr Signer) {
@@ -282,11 +292,9 @@ func TestNewSigner(t *testing.T) {
 func TestSignerSign(t *testing.T) {
 	// used by RFC9421 in test vectors
 	currentTime = func() time.Time { return time.Unix(1618884473, 0) }
-	filterAlgorithm = func(_ SignatureAlgorithm) SignatureAlgorithm { return "" }
 
 	t.Cleanup(func() {
 		currentTime = time.Now
-		filterAlgorithm = func(alg SignatureAlgorithm) SignatureAlgorithm { return alg }
 	})
 
 	pkp384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -411,6 +419,22 @@ func TestSignerSign(t *testing.T) {
 				t.Helper()
 
 				require.Error(t, err)
+			},
+		},
+		{
+			uc:  "include alg parameter when requested",
+			key: Key{Algorithm: HmacSha256, Material: tkMAC},
+			opts: []SignerOption{
+				WithAlg(),
+				WithTTL(0),
+				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
+			},
+			msg: &Message{Header: http.Header{}, IsRequest: true},
+			assert: func(t *testing.T, err error, header http.Header) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, `sig=();created=1618884473;alg="hmac-sha256"`, header.Get("Signature-Input"))
 			},
 		},
 		{

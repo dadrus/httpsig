@@ -12,7 +12,6 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-
 type payloadSigner interface {
 	signPayload(data []byte) ([]byte, error)
 	algorithm() SignatureAlgorithm
@@ -137,12 +136,20 @@ func WithKeyID(keyID string) SignerOption {
 	}
 }
 
+// WithAlg includes the alg signature parameter using Key.Algorithm.
+// By default, alg is omitted.
+func WithAlg() SignerOption {
+	return func(s *signer) error {
+		s.includeAlg = true
+
+		return nil
+	}
+}
+
 // NewSigner creates a Signer using key for cryptographic signing. The key
 // must contain private or symmetric material compatible with its algorithm.
 // By default, the generated signature uses label "sig", includes a created
-// timestamp and a random nonce, expires after 30 seconds, and includes the
-// selected key algorithm in the alg signature parameter. Use options to
-// select covered components and other signature parameters.
+// timestamp and a random nonce, and expires after 30 seconds.
 func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	ps, err := newPayloadSigner(key.Material, key.Algorithm)
 	if err != nil {
@@ -160,6 +167,15 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	for _, opt := range opts {
 		if err = opt(sig); err != nil {
 			return nil, err
+		}
+	}
+
+	if sig.includeAlg {
+		switch sig.ps.algorithm() {
+		case RsaPssSha512, RsaPkcs1v15Sha256, HmacSha256, EcdsaP256Sha256, EcdsaP384Sha384, Ed25519:
+		default:
+			return nil, fmt.Errorf("%w: %s is not registered for HTTP Message Signatures",
+				ErrUnsupportedAlgorithm, sig.ps.algorithm())
 		}
 	}
 
@@ -181,15 +197,16 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 }
 
 type signer struct {
-	label string
-	ids   []*componentIdentifier
-	ttl   time.Duration
-	tag   string
-	keyID string
-	ng    NonceGetter
-	ps    payloadSigner
-	cdAlg DigestAlgorithm
-	mu    messageUpdater
+	label      string
+	ids        []*componentIdentifier
+	ttl        time.Duration
+	tag        string
+	keyID      string
+	includeAlg bool
+	ng         NonceGetter
+	ps         payloadSigner
+	cdAlg      DigestAlgorithm
+	mu         messageUpdater
 }
 
 func (s *signer) Sign(msg *Message) (http.Header, error) {
@@ -239,8 +256,8 @@ func (s *signer) signatureInput(ctx context.Context) (*signatureInput, error) {
 		params.Add(string(KeyID), keyID)
 	}
 
-	if alg := filterAlgorithm(s.ps.algorithm()); alg != "" {
-		params.Add(string(Alg), string(alg))
+	if s.includeAlg {
+		params.Add(string(Alg), string(s.ps.algorithm()))
 	}
 
 	if len(nonce) != 0 {

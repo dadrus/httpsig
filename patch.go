@@ -2,11 +2,7 @@ package httpsig
 
 import "time"
 
-// replaced in tests to have the behavior required to use/verify
-// vectors data provided in RFC9421
+// replaced in tests to use the timestamps from the RFC 9421 test vectors.
 //
 //nolint:gochecknoglobals
-var (
-	currentTime     = time.Now
-	filterAlgorithm = func(alg SignatureAlgorithm) SignatureAlgorithm { return alg }
-)
+var currentTime = time.Now
