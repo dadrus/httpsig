@@ -101,14 +101,16 @@ func WithNonceChecker(checker NonceChecker) VerifierOption {
 // WithRequiredTag selects signatures with the given application tag and
 // applies opts to that signature. Global options in NewVerifier provide
 // defaults for unspecified per-tag requirements. Each tag may be configured
-// only once.
+// only once. An empty tag is not allowed.
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	return func(ver *verifier, _ *expectations, f bool) error {
 		if f {
 			panic("WithRequiredTag cannot be used as option for itself")
 		}
 
-		// TODO: check if the tag is empty, which is reserved for global expectations. such tag is not allowed
+		if len(tag) == 0 {
+			return fmt.Errorf("%w: required tag must not be empty", ErrParameter)
+		}
 
 		if _, configured := ver.tagExpectations[tag]; configured {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)

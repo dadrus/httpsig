@@ -760,6 +760,20 @@ func TestNewVerifier(t *testing.T) {
 			},
 		},
 		{
+			uc:       "with empty required tag",
+			resolver: &KeyResolverMock{},
+			opts: []VerifierOption{
+				WithRequiredTag(""),
+			},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "required tag must not be empty")
+			},
+		},
+		{
 			uc:       "cannot verify and negotiate any possible signature",
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
