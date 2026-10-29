@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"math/big"
-	"slices"
 )
 
 func newECDSASigner(privateKey *ecdsa.PrivateKey, alg SignatureAlgorithm) (*ecdsaSigner, error) {
@@ -74,18 +73,12 @@ func (ecs *ecdsaSigner) signPayload(payload []byte) ([]byte, error) {
 		keyBytes++
 	}
 
-	// We serialize the outputs (r and s) into big-endian byte arrays and pad
-	// them with zeros on the left to make sure the sizes work out. Both arrays
-	// must be keyBytes long, and the output must be 2*keyBytes long.
-	rBytes := r.Bytes()
-	rBytesPadded := make([]byte, keyBytes)
-	copy(rBytesPadded[keyBytes-len(rBytes):], rBytes)
+	// Encode r and s as fixed-width, zero-padded, big-endian integers.
+	signature := make([]byte, 2*keyBytes) //nolint:mnd
+	r.FillBytes(signature[:keyBytes])
+	s.FillBytes(signature[keyBytes:])
 
-	sBytes := s.Bytes()
-	sBytesPadded := make([]byte, keyBytes)
-	copy(sBytesPadded[keyBytes-len(sBytes):], sBytes)
-
-	return slices.Concat(rBytesPadded, sBytesPadded), nil
+	return signature, nil
 }
 
 func newRSASigner(privateKey *rsa.PrivateKey, alg SignatureAlgorithm) (*rsaSigner, error) {
