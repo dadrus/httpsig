@@ -1,7 +1,6 @@
 package httpsig
 
 import (
-	"bytes"
 	"fmt"
 	"slices"
 	"time"
@@ -62,8 +61,6 @@ func (si *signatureInput) parameters() SignatureParameters {
 			value = Token(v)
 		case httpsfv.DisplayString:
 			value = string(v)
-		case []byte:
-			value = bytes.Clone(v)
 		}
 
 		result[name] = value
