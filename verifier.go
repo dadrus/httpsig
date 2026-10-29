@@ -1,7 +1,6 @@
 package httpsig
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -14,39 +13,46 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
+// VerifiedSignature contains the attributes of a successfully verified HTTP
+// message signature and the metadata returned by the KeyResolver.
+type VerifiedSignature struct {
+	// Label is the received signature label. It is not cryptographically
+	// protected and must not be used as an identity or authorization claim.
+	Label string
+
+	// Components contains the canonicalized values of the covered HTTP
+	// message components, without the synthetic @signature-params component.
+	Components map[string]string
+
+	// Parameters contains the actual transmitted signature parameters,
+	// including extensions, without synthetic defaults.
+	Parameters SignatureParameters
+
+	// Metadata is the application-defined metadata provided by the KeyResolver
+	// for this signature.
+	Metadata any
+}
+
+// VerificationResult contains the signatures selected and successfully
+// verified during one call to Verifier.Verify.
+type VerificationResult []VerifiedSignature
+
+// Verifier verifies HTTP message signatures according to its configured
+// requirements. A call succeeds only if all selected signatures pass.
 type Verifier interface {
-	Verify(msg *Message) error
+	// Verify returns information about the successfully verified signatures
+	// or an error.
+	Verify(msg *Message) (VerificationResult, error)
 }
 
-// KeyResolver is used to resolve a key id to a verifying key.
-type KeyResolver interface {
-	ResolveKey(ctx context.Context, keyID string) (Key, error)
-}
-
-type payloadVerifier interface {
-	verifyPayload(data []byte, signature []byte) error
-	algorithm() SignatureAlgorithm
-	keyID() string
-}
-
-func newPayloadVerifier(verificationKey any, keyID string, alg SignatureAlgorithm) (payloadVerifier, error) {
-	switch publicKey := verificationKey.(type) {
-	case ed25519.PublicKey:
-		return newEd25519Verifier(publicKey, keyID, alg)
-	case *rsa.PublicKey:
-		return newRSAVerifier(publicKey, keyID, alg)
-	case *ecdsa.PublicKey:
-		return newECDSAVerifier(publicKey, keyID, alg)
-	case []byte:
-		return newSymmetricSigner(publicKey, keyID, alg)
-	default:
-		return nil, ErrUnsupportedKeyType
-	}
-}
-
+// VerifierOption configures which signatures to verify and which generic
+// checks to apply. Options can be provided to NewVerifier or used within
+// WithRequiredTag for per-tag expectations. Options such as WithNonceChecker
+// configure the verifier globally even when supplied within a tag.
 type VerifierOption func(v *verifier, e *expectations, f bool) error
 
-// WithRequiredComponents sets the HTTP fields / derived component names to be included in signing.
+// WithRequiredComponents specifies HTTP fields or derived component
+// identifiers that must be covered by a signature to which the option applies.
 func WithRequiredComponents(identifiers ...string) VerifierOption {
 	return func(_ *verifier, exp *expectations, _ bool) error {
 		var err error
@@ -57,7 +63,8 @@ func WithRequiredComponents(identifiers ...string) VerifierOption {
 	}
 }
 
-// WithValidityTolerance sets the clock tolerance for verifying created and expires times.
+// WithValidityTolerance allows a clock skew of d when checking the created
+// and expires signature parameters.
 func WithValidityTolerance(d time.Duration) VerifierOption {
 	return func(_ *verifier, e *expectations, _ bool) error {
 		e.tolerance = d
@@ -66,6 +73,8 @@ func WithValidityTolerance(d time.Duration) VerifierOption {
 	}
 }
 
+// WithMaxAge sets the maximum age of signatures with a created timestamp.
+// The default for NewVerifier is 30 seconds.
 func WithMaxAge(d time.Duration) VerifierOption {
 	return func(_ *verifier, e *expectations, _ bool) error {
 		e.maxAge = d
@@ -74,7 +83,12 @@ func WithMaxAge(d time.Duration) VerifierOption {
 	}
 }
 
+// WithNonceChecker sets the checker for the nonce parameter, including when
+// the parameter is absent. If checker is nil, the no-op default remains. CheckNonce
+// may be called before cryptographic verification has succeeded; checkers
+// with replay state must account for unsuccessful verification attempts.
 func WithNonceChecker(checker NonceChecker) VerifierOption {
+	// TODO: Maybe we should use checker after cryptographic verification has succeeded
 	return func(v *verifier, _ *expectations, _ bool) error {
 		if checker != nil {
 			v.nonceChecker = checker
@@ -84,11 +98,17 @@ func WithNonceChecker(checker NonceChecker) VerifierOption {
 	}
 }
 
+// WithRequiredTag selects signatures with the given application tag and
+// applies opts to that signature. Global options in NewVerifier provide
+// defaults for unspecified per-tag requirements. Each tag may be configured
+// only once.
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	return func(ver *verifier, _ *expectations, f bool) error {
 		if f {
 			panic("WithRequiredTag cannot be used as option for itself")
 		}
+
+		// TODO: check if the tag is empty, which is reserved for global expectations. such tag is not allowed
 
 		if _, configured := ver.tagExpectations[tag]; configured {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)
@@ -111,6 +131,9 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	}
 }
 
+// WithValidateAllSignatures verifies every signature in the message, not just
+// those selected with WithRequiredTag. When a signature has a configured tag,
+// its per-tag requirements apply; otherwise, global requirements apply.
 func WithValidateAllSignatures() VerifierOption {
 	return func(v *verifier, _ *expectations, _ bool) error {
 		v.validateAllSigs = true
@@ -119,7 +142,11 @@ func WithValidateAllSignatures() VerifierOption {
 	}
 }
 
+// WithCreatedTimestampRequired controls whether the created parameter must
+// be present. If present, it is still checked even when flag is false.
+// NewVerifier requires created by default.
 func WithCreatedTimestampRequired(flag bool) VerifierOption {
+	// TODO: Same challenge as WithExpiredTimestampRequired
 	return func(_ *verifier, exp *expectations, _ bool) error {
 		exp.reqCreatedTS = &flag
 
@@ -127,7 +154,12 @@ func WithCreatedTimestampRequired(flag bool) VerifierOption {
 	}
 }
 
+// WithExpiredTimestampRequired controls whether the expires parameter must
+// be present. If present, it is still checked even when flag is false.
+// NewVerifier requires expires by default.
 func WithExpiredTimestampRequired(flag bool) VerifierOption {
+	// TODO: if the flag is false, then the expires parameter must not be present in the signature. This must be checked.
+	// There is a need to think more about the semantics as different rfcs have different requirements on that parameter
 	return func(_ *verifier, exp *expectations, _ bool) error {
 		exp.reqExpiresTS = &flag
 
@@ -135,6 +167,14 @@ func WithExpiredTimestampRequired(flag bool) VerifierOption {
 	}
 }
 
+// WithSignatureNegotiation enables Accept-Signature negotiation when a
+// required signature or required component or parameter is missing.
+//
+// Negotiation reuses the relevant verifier requirements; opts specify only
+// additional requests such as a key ID, nonce, algorithm, or label. A caller
+// can extract NoApplicableSignatureError from a verification failure and call
+// its Negotiate method to populate response headers. Negotiation configured
+// globally cannot be combined with WithValidateAllSignatures.
 func WithSignatureNegotiation(opts ...SignatureNegotiationOption) VerifierOption {
 	no := &sigNegotiationOpts{opts: make([]AcceptSignatureOption, 0, len(opts))}
 	for _, opt := range opts {
@@ -157,33 +197,54 @@ type sigNegotiationOpts struct {
 	opts []AcceptSignatureOption
 }
 
+// SignatureNegotiationOption configures the additional values requested by
+// WithSignatureNegotiation beyond the verifier's existing requirements.
 type SignatureNegotiationOption func(sno *sigNegotiationOpts)
 
-func WithRequestedKey(key Key) SignatureNegotiationOption {
+// WithRequestedSignatureAlgorithm requests alg in the generated
+// Accept-Signature header.
+func WithRequestedSignatureAlgorithm(alg SignatureAlgorithm) SignatureNegotiationOption {
 	return func(sno *sigNegotiationOpts) {
-		sno.opts = append(sno.opts, WithExpectedKey(key))
+		sno.opts = append(sno.opts, WithExpectedSignatureAlgorithm(alg))
 	}
 }
 
+// WithRequestedNonce supplies the nonce source for Accept-Signature
+// negotiation.
 func WithRequestedNonce(ng NonceGetter) SignatureNegotiationOption {
 	return func(sno *sigNegotiationOpts) {
 		sno.opts = append(sno.opts, WithExpectedNonce(ng))
 	}
 }
 
+// WithRequestedContentDigestAlgorithmPreferences sets the Want-Content-Digest
+// preferences emitted when negotiation requires a content-digest component.
 func WithRequestedContentDigestAlgorithmPreferences(prefs ...AlgorithmPreference) SignatureNegotiationOption {
 	return func(sno *sigNegotiationOpts) {
 		sno.opts = append(sno.opts, WithContentDigestAlgorithmPreferences(prefs...))
 	}
 }
 
+// WithRequestedLabel sets the technical label requested in Accept-Signature.
+// Signature labels are not authenticated and must not carry identity meaning.
 func WithRequestedLabel(label string) SignatureNegotiationOption {
 	return func(sno *sigNegotiationOpts) {
 		sno.opts = append(sno.opts, WithExpectedLabel(label))
 	}
 }
 
-// NewVerifier creates a new verifier with the given options.
+// WithRequestedKeyID requests keyID as the keyid parameter in the generated
+// Accept-Signature header.
+func WithRequestedKeyID(keyID string) SignatureNegotiationOption {
+	return func(sno *sigNegotiationOpts) {
+		sno.opts = append(sno.opts, WithExpectedKeyID(keyID))
+	}
+}
+
+// NewVerifier creates a Verifier instance.
+// Without WithValidateAllSignatures, at least one WithRequiredTag is necessary.
+// By default, created and expires are required and signatures may be at most
+// 30 seconds old. More specific requirements can be set through opts.
 //
 //nolint:cyclop
 func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error) {
@@ -265,6 +326,25 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	}
 
 	return ver, nil
+}
+
+type payloadVerifier interface {
+	verifyPayload(data []byte, signature []byte) error
+}
+
+func newPayloadVerifier(verificationKey any, alg SignatureAlgorithm) (payloadVerifier, error) {
+	switch publicKey := verificationKey.(type) {
+	case ed25519.PublicKey:
+		return newEd25519Verifier(publicKey, alg)
+	case *rsa.PublicKey:
+		return newRSAVerifier(publicKey, alg)
+	case *ecdsa.PublicKey:
+		return newECDSAVerifier(publicKey, alg)
+	case []byte:
+		return newSymmetricSigner(publicKey, alg)
+	default:
+		return nil, ErrUnsupportedKeyType
+	}
 }
 
 type expectations struct {
@@ -369,29 +449,30 @@ type verifier struct {
 	nonceChecker    NonceChecker
 }
 
-func (v *verifier) Verify(msg *Message) error {
+func (v *verifier) Verify(msg *Message) (VerificationResult, error) {
 	sigRefs, err := getSignatureReferences(msg.Header.Values(headerSignatureInput))
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 	}
 
 	signatureDict, err := httpsfv.UnmarshalDictionary(msg.Header.Values(headerSignature))
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 	}
 
 	// look if we miss any signatures for configured tags
 	if v.hasMissingSignatures(sigRefs) {
-		return fmt.Errorf("%w: %w", ErrVerificationFailed, v.negotiateSignatureParameters(msg))
+		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, v.negotiateSignatureParameters(msg))
 	}
 
 	// collect those signatures, which we can verify
 	applicableSignatures, err := v.applicableSignatures(sigRefs)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 	}
 
 	// do the actual verification
+	results := make([]VerifiedSignature, 0, len(applicableSignatures))
 	for name, params := range applicableSignatures {
 		tag, _ := params.tag()
 
@@ -402,20 +483,22 @@ func (v *verifier) Verify(msg *Message) error {
 
 		signature, err := v.extractSignature(signatureDict, name)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+			return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 		}
 
-		err = v.verifySignature(msg, signature, params, exp)
+		result, err := v.verifySignature(msg, name, signature, params, exp)
 		if err != nil {
 			if errors.Is(err, ErrMissingParameter) {
-				return fmt.Errorf("%w: %w", ErrVerificationFailed, v.negotiateSignatureParameters(msg))
+				return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, v.negotiateSignatureParameters(msg))
 			}
 
-			return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+			return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 		}
+
+		results = append(results, result)
 	}
 
-	return nil
+	return results, nil
 }
 
 func (v *verifier) applicableSignatures(refs map[string]*signatureInput) (map[string]*signatureInput, error) {
@@ -487,37 +570,58 @@ func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureInput) bool
 
 func (v *verifier) verifySignature(
 	msg *Message,
+	label string,
 	signature []byte,
 	si *signatureInput,
 	exp *expectations,
-) error {
+) (VerifiedSignature, error) {
 	base, err := newSignatureBase(si, msg)
 	if err != nil {
-		return err
+		return VerifiedSignature{}, err
 	}
 
-	keyID, _ := si.keyID()
-
-	key, err := v.keyResolver.ResolveKey(msg.Context, keyID)
+	components, err := base.components()
 	if err != nil {
-		return err
+		return VerifiedSignature{}, err
 	}
 
-	if err = exp.assert(si, msg, key.Algorithm, v.nonceChecker); err != nil {
-		return err
-	}
+	params := si.parameters()
 
-	verifier, err := newPayloadVerifier(key.Key, key.KeyID, key.Algorithm)
+	keyInfo, err := v.keyResolver.ResolveKey(msg.Context, SignatureInfo{
+		Label:      label,
+		Message:    msg,
+		Components: components,
+		Parameters: params,
+	})
 	if err != nil {
-		return err
+		return VerifiedSignature{}, err
+	}
+
+	if err = exp.assert(si, msg, keyInfo.Key.Algorithm, v.nonceChecker); err != nil {
+		return VerifiedSignature{}, err
+	}
+
+	verifier, err := newPayloadVerifier(keyInfo.Key.Material, keyInfo.Key.Algorithm)
+	if err != nil {
+		return VerifiedSignature{}, err
 	}
 
 	sb, err := base.marshal()
 	if err != nil {
-		return err
+		return VerifiedSignature{}, err
 	}
 
-	return verifier.verifyPayload(sb, signature)
+	err = verifier.verifyPayload(sb, signature)
+	if err != nil {
+		return VerifiedSignature{}, err
+	}
+
+	return VerifiedSignature{
+		Label:      label,
+		Components: components,
+		Parameters: params,
+		Metadata:   keyInfo.Metadata,
+	}, nil
 }
 
 func getSignatureReferences(values []string) (map[string]*signatureInput, error) {

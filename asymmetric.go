@@ -11,7 +11,7 @@ import (
 	"slices"
 )
 
-func newECDSASigner(privateKey *ecdsa.PrivateKey, kid string, alg SignatureAlgorithm) (*ecdsaSigner, error) {
+func newECDSASigner(privateKey *ecdsa.PrivateKey, alg SignatureAlgorithm) (*ecdsaSigner, error) {
 	var (
 		expectedBitSize int
 		hash            crypto.Hash
@@ -44,7 +44,6 @@ func newECDSASigner(privateKey *ecdsa.PrivateKey, kid string, alg SignatureAlgor
 	return &ecdsaSigner{
 		alg:        alg,
 		privateKey: privateKey,
-		kid:        kid,
 		hash:       hash,
 	}, nil
 }
@@ -52,11 +51,8 @@ func newECDSASigner(privateKey *ecdsa.PrivateKey, kid string, alg SignatureAlgor
 type ecdsaSigner struct {
 	alg        SignatureAlgorithm
 	privateKey *ecdsa.PrivateKey
-	kid        string
 	hash       crypto.Hash
 }
-
-func (ecs *ecdsaSigner) keyID() string { return ecs.kid }
 
 func (ecs *ecdsaSigner) algorithm() SignatureAlgorithm { return ecs.alg }
 
@@ -92,7 +88,7 @@ func (ecs *ecdsaSigner) signPayload(payload []byte) ([]byte, error) {
 	return slices.Concat(rBytesPadded, sBytesPadded), nil
 }
 
-func newRSASigner(privateKey *rsa.PrivateKey, kid string, alg SignatureAlgorithm) (*rsaSigner, error) {
+func newRSASigner(privateKey *rsa.PrivateKey, alg SignatureAlgorithm) (*rsaSigner, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -114,18 +110,14 @@ func newRSASigner(privateKey *rsa.PrivateKey, kid string, alg SignatureAlgorithm
 		alg:        alg,
 		hash:       hash,
 		privateKey: privateKey,
-		kid:        kid,
 	}, nil
 }
 
 type rsaSigner struct {
 	alg        SignatureAlgorithm
 	privateKey *rsa.PrivateKey
-	kid        string
 	hash       crypto.Hash
 }
-
-func (s *rsaSigner) keyID() string { return s.kid }
 
 func (s *rsaSigner) algorithm() SignatureAlgorithm { return s.alg }
 
@@ -158,7 +150,7 @@ func (s *rsaSigner) signPayload(payload []byte) ([]byte, error) {
 	return out, nil
 }
 
-func newEd25519Signer(privateKey ed25519.PrivateKey, kid string, alg SignatureAlgorithm) (*ed25519Signer, error) {
+func newEd25519Signer(privateKey ed25519.PrivateKey, alg SignatureAlgorithm) (*ed25519Signer, error) {
 	if alg != Ed25519 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
@@ -174,17 +166,13 @@ func newEd25519Signer(privateKey ed25519.PrivateKey, kid string, alg SignatureAl
 	return &ed25519Signer{
 		alg:        alg,
 		privateKey: privateKey,
-		kid:        kid,
 	}, nil
 }
 
 type ed25519Signer struct {
 	alg        SignatureAlgorithm
 	privateKey ed25519.PrivateKey
-	kid        string
 }
-
-func (s *ed25519Signer) keyID() string { return s.kid }
 
 func (s *ed25519Signer) algorithm() SignatureAlgorithm { return s.alg }
 
@@ -192,7 +180,7 @@ func (s *ed25519Signer) signPayload(payload []byte) ([]byte, error) {
 	return ed25519.Sign(s.privateKey, payload), nil
 }
 
-func newECDSAVerifier(publicKey *ecdsa.PublicKey, keyID string, alg SignatureAlgorithm) (*ecdsaVerifier, error) {
+func newECDSAVerifier(publicKey *ecdsa.PublicKey, alg SignatureAlgorithm) (*ecdsaVerifier, error) {
 	var (
 		expectedBitSize int
 		hash            crypto.Hash
@@ -225,7 +213,6 @@ func newECDSAVerifier(publicKey *ecdsa.PublicKey, keyID string, alg SignatureAlg
 	return &ecdsaVerifier{
 		alg:       alg,
 		publicKey: publicKey,
-		kid:       keyID,
 		hash:      hash,
 	}, nil
 }
@@ -233,13 +220,8 @@ func newECDSAVerifier(publicKey *ecdsa.PublicKey, keyID string, alg SignatureAlg
 type ecdsaVerifier struct {
 	publicKey *ecdsa.PublicKey
 	alg       SignatureAlgorithm
-	kid       string
 	hash      crypto.Hash
 }
-
-func (v *ecdsaVerifier) keyID() string { return v.kid }
-
-func (v *ecdsaVerifier) algorithm() SignatureAlgorithm { return v.alg }
 
 func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	hasher := v.hash.New()
@@ -269,7 +251,7 @@ func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	return nil
 }
 
-func newRSAVerifier(publicKey *rsa.PublicKey, kid string, alg SignatureAlgorithm) (*rsaVerifier, error) {
+func newRSAVerifier(publicKey *rsa.PublicKey, alg SignatureAlgorithm) (*rsaVerifier, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -291,20 +273,14 @@ func newRSAVerifier(publicKey *rsa.PublicKey, kid string, alg SignatureAlgorithm
 		alg:       alg,
 		hash:      hash,
 		publicKey: publicKey,
-		kid:       kid,
 	}, nil
 }
 
 type rsaVerifier struct {
 	publicKey *rsa.PublicKey
 	alg       SignatureAlgorithm
-	kid       string
 	hash      crypto.Hash
 }
-
-func (v *rsaVerifier) keyID() string { return v.kid }
-
-func (v *rsaVerifier) algorithm() SignatureAlgorithm { return v.alg }
 
 func (v *rsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	hasher := v.hash.New()
@@ -329,7 +305,7 @@ func (v *rsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	return nil
 }
 
-func newEd25519Verifier(publicKey ed25519.PublicKey, keyID string, alg SignatureAlgorithm) (*ed25519Verifier, error) {
+func newEd25519Verifier(publicKey ed25519.PublicKey, alg SignatureAlgorithm) (*ed25519Verifier, error) {
 	if alg != Ed25519 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
@@ -345,19 +321,13 @@ func newEd25519Verifier(publicKey ed25519.PublicKey, keyID string, alg Signature
 	return &ed25519Verifier{
 		publicKey: publicKey,
 		alg:       alg,
-		kid:       keyID,
 	}, nil
 }
 
 type ed25519Verifier struct {
 	alg       SignatureAlgorithm
 	publicKey ed25519.PublicKey
-	kid       string
 }
-
-func (v *ed25519Verifier) keyID() string { return v.kid }
-
-func (v *ed25519Verifier) algorithm() SignatureAlgorithm { return v.alg }
 
 func (v *ed25519Verifier) verifyPayload(payload []byte, signature []byte) error {
 	if ok := ed25519.Verify(v.publicKey, payload, signature); !ok {

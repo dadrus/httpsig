@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func TestNewPayloadVerifier(t *testing.T) {
 		{uc: "hmac verifier", key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newPayloadVerifier(tc.key, "test", tc.alg)
+			sig, err := newPayloadVerifier(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -649,7 +650,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 				assert.IsType(t, nonceGetter{}, asb.nonceGetter)
 				assert.Equal(t, "sig", asb.label)
 				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
-				assert.Empty(t, asb.keyAlgorithm)
+				assert.Empty(t, asb.signatureAlgorithm)
 				assert.Empty(t, asb.keyID)
 				// not set by any of the options
 				assert.True(t, asb.addCreatedTS)
@@ -664,7 +665,8 @@ func TestWithSignatureNegotiation(t *testing.T) {
 			opts: []SignatureNegotiationOption{
 				WithRequestedLabel("foo"),
 				WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
-				WithRequestedKey(Key{KeyID: "bar", Algorithm: RsaPssSha512}),
+				WithRequestedSignatureAlgorithm(RsaPssSha512),
+				WithRequestedKeyID("bar"),
 				WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
@@ -679,7 +681,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 				require.Equal(t, "abc", nonce)
 				assert.Equal(t, "foo", asb.label)
 				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-512=2"})
-				assert.Equal(t, RsaPssSha512, asb.keyAlgorithm)
+				assert.Equal(t, RsaPssSha512, asb.signatureAlgorithm)
 				assert.Equal(t, "bar", asb.keyID)
 				// not set by any of the options
 				assert.True(t, asb.addCreatedTS)
@@ -846,7 +848,8 @@ func TestNewVerifier(t *testing.T) {
 				WithValidityTolerance(1 * time.Second),
 				WithRequiredComponents("@status", "content-digest"),
 				WithSignatureNegotiation(
-					WithRequestedKey(Key{KeyID: "bar", Algorithm: RsaPssSha512}),
+					WithRequestedSignatureAlgorithm(RsaPssSha512),
+					WithRequestedKeyID("bar"),
 				),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -868,7 +871,7 @@ func TestNewVerifier(t *testing.T) {
 				assert.IsType(t, nonceGetter{}, exp.asb.nonceGetter)
 				assert.Equal(t, "sig", exp.asb.label)
 				assert.ElementsMatch(t, exp.asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
-				assert.Equal(t, RsaPssSha512, exp.asb.keyAlgorithm)
+				assert.Equal(t, RsaPssSha512, exp.asb.signatureAlgorithm)
 				assert.Equal(t, "bar", exp.asb.keyID)
 				assert.True(t, exp.asb.addCreatedTS)
 				assert.True(t, exp.asb.addExpiresTS)
@@ -966,14 +969,14 @@ func TestVerifierVerify(t *testing.T) {
 		opts              []VerifierOption
 		msg               *Message
 		configureResolver func(t *testing.T, kr *KeyResolverMock)
-		assert            func(t *testing.T, err error)
+		assert            func(t *testing.T, err error, results VerificationResult)
 	}{
 		{
 			uc:                "without signature-input header",
 			opts:              []VerifierOption{WithValidateAllSignatures()},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -990,7 +993,7 @@ func TestVerifierVerify(t *testing.T) {
 				},
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1008,7 +1011,7 @@ func TestVerifierVerify(t *testing.T) {
 				},
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1026,7 +1029,7 @@ func TestVerifierVerify(t *testing.T) {
 				},
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1045,7 +1048,7 @@ func TestVerifierVerify(t *testing.T) {
 				},
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1063,7 +1066,7 @@ func TestVerifierVerify(t *testing.T) {
 				},
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1088,7 +1091,7 @@ func TestVerifierVerify(t *testing.T) {
 				IsRequest: true,
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1108,9 +1111,17 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test").Return(Key{}, errors.New("test error"))
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig" &&
+							si.Message != nil &&
+							len(si.Components) == 0 &&
+							si.Parameters["keyid"] == "test" &&
+							si.Parameters["created"] == int64(1618884473)
+					})).
+					Return(KeyInfo{}, errors.New("test error"))
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1130,9 +1141,18 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test").Return(Key{}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig" &&
+							si.Message != nil &&
+							len(si.Components) == 0 &&
+							si.Parameters["expires"] == int64(1618884470) &&
+							si.Parameters["keyid"] == "test" &&
+							si.Parameters["tag"] == "foo"
+					})).
+					Return(KeyInfo{}, nil)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1156,9 +1176,17 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test").Return(Key{Key: &rsa.PrivateKey{}}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig" &&
+							si.Message != nil &&
+							len(si.Components) == 0 &&
+							si.Parameters["keyid"] == "test" &&
+							si.Parameters["tag"] == "foo"
+					})).
+					Return(KeyInfo{Key: Key{Material: &rsa.PrivateKey{}}}, nil)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1185,10 +1213,22 @@ func TestVerifierVerify(t *testing.T) {
 				pk2048, err := rsa.GenerateKey(rand.Reader, 2048)
 				require.NoError(t, err)
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test").Return(
-					Key{Key: &pk2048.PublicKey, KeyID: "test", Algorithm: RsaPkcs1v15Sha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig" &&
+							si.Message != nil &&
+							len(si.Components) == 0 &&
+							si.Parameters["keyid"] == "test" &&
+							si.Parameters["tag"] == "foo"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: &pk2048.PublicKey, Algorithm: RsaPkcs1v15Sha512},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1202,7 +1242,8 @@ func TestVerifierVerify(t *testing.T) {
 				WithRequiredTag("foo",
 					WithRequiredComponents("@method", "content-digest"),
 					WithSignatureNegotiation(
-						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedSignatureAlgorithm(RsaPssSha512),
+						WithRequestedKeyID("test-key"),
 						WithRequestedLabel("bar"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
@@ -1211,7 +1252,7 @@ func TestVerifierVerify(t *testing.T) {
 			},
 			msg:               &Message{Header: http.Header{}},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				var targetErr *NoApplicableSignatureError
@@ -1233,7 +1274,8 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithSignatureNegotiation(
-						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedSignatureAlgorithm(RsaPssSha512),
+						WithRequestedKeyID("test-key"),
 						WithRequestedLabel("bar"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
@@ -1255,10 +1297,25 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key").Return(
-					Key{Key: tkRSAPSS, KeyID: "test-key", Algorithm: RsaPssSha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig" &&
+							si.Message != nil &&
+							si.Message.Header.Get("Content-Length") == "18" &&
+							len(si.Components) == 0 &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key" &&
+							si.Parameters["nonce"] == "abc" &&
+							si.Parameters["tag"] == "foo"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkRSAPSS, Algorithm: RsaPssSha512},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				var targetErr *NoApplicableSignatureError
@@ -1280,14 +1337,15 @@ func TestVerifierVerify(t *testing.T) {
 				WithRequiredTag("foo",
 					WithRequiredComponents("@method"),
 					WithSignatureNegotiation(
-						WithRequestedKey(Key{KeyID: "test-key", Algorithm: RsaPssSha512}),
+						WithRequestedSignatureAlgorithm(RsaPssSha512),
+						WithRequestedKeyID("test-key"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
 					),
 				),
 			},
 			msg:               &Message{Header: http.Header{}},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1324,10 +1382,26 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-rsa-pss").Return(
-					Key{Key: tkRSAPSS, KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b22" &&
+							si.Message != nil &&
+							si.Message.Header.Get("Content-Length") == "18" &&
+							len(si.Components) == 3 &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["@query-param;name=\"Pet\""] == "dog" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-rsa-pss" &&
+							si.Parameters["tag"] == "header-example"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkRSAPSS, Algorithm: RsaPssSha512},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1361,13 +1435,42 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-rsa-pss").Return(
-					Key{Key: tkRSAPSS, KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b21" &&
+							si.Message != nil &&
+							si.Message.Header.Get("Content-Length") == "18" &&
+							len(si.Components) == 0 &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-rsa-pss" &&
+							si.Parameters["nonce"] == "b3k2pp5k7z-50gnwp.yemd"
+					})).
+					Return(
+						KeyInfo{
+							Key:      Key{Material: tkRSAPSS, Algorithm: RsaPssSha512},
+							Metadata: "foo",
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b21", sig.Label)
+
+				assert.Empty(t, sig.Components)
+
+				assert.Len(t, sig.Parameters, 3)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-rsa-pss", sig.Parameters["keyid"])
+				assert.Equal(t, "b3k2pp5k7z-50gnwp.yemd", sig.Parameters["nonce"])
+
+				assert.Equal(t, "foo", sig.Metadata)
 			},
 		},
 		{
@@ -1399,13 +1502,46 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-rsa-pss").Return(
-					Key{Key: tkRSAPSS, KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b22" &&
+							si.Message != nil &&
+							si.Message.Header.Get("Content-Length") == "18" &&
+							len(si.Components) == 3 &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["@query-param;name=\"Pet\""] == "dog" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-rsa-pss" &&
+							si.Parameters["tag"] == "header-example"
+					})).
+					Return(
+						KeyInfo{
+							Key:      Key{Material: tkRSAPSS, Algorithm: RsaPssSha512},
+							Metadata: []string{"foo"},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b22", sig.Label)
+
+				assert.Len(t, sig.Components, 3)
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "dog", sig.Components["@query-param;name=\"Pet\""])
+
+				assert.Len(t, sig.Parameters, 3)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-rsa-pss", sig.Parameters["keyid"])
+				assert.Equal(t, "header-example", sig.Parameters["tag"])
+
+				assert.Equal(t, []string{"foo"}, sig.Metadata)
 			},
 		},
 		{
@@ -1437,13 +1573,55 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-rsa-pss").Return(
-					Key{Key: tkRSAPSS, KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b23" &&
+							si.Message != nil &&
+							si.Message.Header.Get("Content-Length") == "18" &&
+							len(si.Components) == 8 &&
+							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components["@method"] == "POST" &&
+							si.Components["@path"] == "/foo" &&
+							si.Components["@query"] == "?param=Value&Pet=dog" &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["content-type"] == "application/json" &&
+							si.Components["content-digest"] == "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:" &&
+							si.Components["content-length"] == "18" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-rsa-pss"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkRSAPSS, Algorithm: RsaPssSha512},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b23", sig.Label)
+
+				assert.Len(t, sig.Components, 8)
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
+				assert.Equal(t, "POST", sig.Components["@method"])
+				assert.Equal(t, "/foo", sig.Components["@path"])
+				assert.Equal(t, "?param=Value&Pet=dog", sig.Components["@query"])
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:", sig.Components["content-digest"])
+				assert.Equal(t, "18", sig.Components["content-length"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-rsa-pss", sig.Parameters["keyid"])
+
+				assert.Nil(t, sig.Metadata)
 			},
 		},
 		{
@@ -1473,13 +1651,47 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-ecc-p256").Return(
-					Key{KeyID: "test-key-ecc-p256", Algorithm: EcdsaP256Sha256, Key: tkECCP256}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b24" &&
+							si.Message != nil &&
+							len(si.Components) == 4 &&
+							si.Components["@status"] == "200" &&
+							si.Components["content-type"] == "application/json" &&
+							si.Components["content-digest"] == "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:" &&
+							si.Components["content-length"] == "23" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-ecc-p256"
+					})).
+					Return(
+						KeyInfo{
+							Key:      Key{Material: tkECCP256, Algorithm: EcdsaP256Sha256},
+							Metadata: map[string]int{"foo": 1},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b24", sig.Label)
+
+				assert.Len(t, sig.Components, 4)
+				assert.Equal(t, "200", sig.Components["@status"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:", sig.Components["content-digest"])
+				assert.Equal(t, "23", sig.Components["content-length"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-ecc-p256", sig.Parameters["keyid"])
+
+				assert.Equal(t, map[string]int{"foo": 1}, sig.Metadata)
 			},
 		},
 		{
@@ -1508,13 +1720,44 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
-					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b25" &&
+							si.Message != nil &&
+							len(si.Components) == 3 &&
+							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["content-type"] == "application/json" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-shared-secret"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkMAC, Algorithm: HmacSha256},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b25", sig.Label)
+
+				assert.Len(t, sig.Components, 3)
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-shared-secret", sig.Parameters["keyid"])
+
+				assert.Empty(t, sig.Metadata)
 			},
 		},
 		{
@@ -1544,13 +1787,50 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-key-ed25519").Return(
-					Key{KeyID: "test-key-ed25519", Algorithm: Ed25519, Key: tkEd25519}, nil)
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "sig-b26" &&
+							si.Message != nil &&
+							len(si.Components) == 6 &&
+							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components["@method"] == "POST" &&
+							si.Components["@path"] == "/foo" &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["content-type"] == "application/json" &&
+							si.Components["content-length"] == "18" &&
+							si.Parameters["created"] == int64(1618884473) &&
+							si.Parameters["keyid"] == "test-key-ed25519"
+					})).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkEd25519, Algorithm: Ed25519},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "sig-b26", sig.Label)
+
+				assert.Len(t, sig.Components, 6)
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
+				assert.Equal(t, "POST", sig.Components["@method"])
+				assert.Equal(t, "/foo", sig.Components["@path"])
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "18", sig.Components["content-length"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-ed25519", sig.Parameters["keyid"])
+
+				assert.Empty(t, sig.Metadata)
 			},
 		},
 		{
@@ -1574,14 +1854,33 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
-					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
-				).Once()
+				kr.EXPECT().ResolveKey(mock.Anything, mock.Anything).
+					Return(
+						KeyInfo{
+							Key:      Key{Material: tkMAC, Algorithm: HmacSha256},
+							Metadata: map[string]string{"foo": "bar"},
+						},
+						nil,
+					).Once()
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.NoError(t, err)
+
+				require.Len(t, results, 1)
+
+				sig := results[0]
+				assert.Equal(t, "valid", sig.Label)
+
+				assert.Len(t, sig.Components, 0)
+
+				assert.Len(t, sig.Parameters, 3)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-shared-secret", sig.Parameters["keyid"])
+				assert.Equal(t, "foo", sig.Parameters["tag"])
+
+				assert.Equal(t, map[string]string{"foo": "bar"}, sig.Metadata)
 			},
 		},
 		{
@@ -1605,15 +1904,126 @@ func TestVerifierVerify(t *testing.T) {
 			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
 				t.Helper()
 
-				kr.EXPECT().ResolveKey(mock.Anything, "test-shared-secret").Return(
-					Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC}, nil,
-				)
+				kr.EXPECT().ResolveKey(mock.Anything, mock.Anything).
+					Return(
+						KeyInfo{
+							Key: Key{Material: tkMAC, Algorithm: HmacSha256},
+						},
+						nil,
+					)
 			},
-			assert: func(t *testing.T, err error) {
+			assert: func(t *testing.T, err error, results VerificationResult) {
 				t.Helper()
 
 				require.ErrorIs(t, err, ErrVerificationFailed)
 				require.ErrorIs(t, err, ErrInvalidSignature)
+
+				require.Empty(t, results)
+			},
+		},
+		{
+			uc: "multiple valid signatures with different keys and metadata",
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithExpiredTimestampRequired(false),
+			},
+			msg: &Message{
+				Method:    http.MethodPost,
+				Authority: "example.com",
+				URL:       testURL,
+				Header: http.Header{
+					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+					"Content-Type":   []string{"application/json"},
+					"Content-Length": []string{"18"},
+					"Signature-Input": []string{
+						`first=("date" "@authority" "content-type");created=1618884473;keyid="test-shared-secret", ` +
+							`second=("date" "@method" "@path" "@authority" "content-type" "content-length");created=1618884473;keyid="test-key-ed25519"`,
+					},
+					"Signature": []string{
+						`first=:pxcQw6G3AjtMBQjwo8XzkZf/bws5LelbaMk5rGIGtE8=:, ` +
+							`second=:wqcAqbmYJ2ji2glfAMaRy4gruYYnx2nEFN2HN6jrnDnQCK1u02Gb04v9EDgwUPiu4A0w6vuQv5lIp5WPpBKRCw==:`,
+					},
+				},
+				IsRequest: true,
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "first" &&
+							si.Parameters["keyid"] == "test-shared-secret" &&
+							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components["@authority"] == "example.com" &&
+							si.Components["content-type"] == "application/json"
+					})).
+					Return(KeyInfo{
+						Key:      Key{Material: tkMAC, Algorithm: HmacSha256},
+						Metadata: "hmac",
+					}, nil).
+					Once()
+
+				kr.EXPECT().ResolveKey(mock.Anything,
+					mock.MatchedBy(func(si SignatureInfo) bool {
+						return si.Label == "second" &&
+							si.Parameters["keyid"] == "test-key-ed25519" &&
+							si.Components["@method"] == "POST" &&
+							si.Components["@path"] == "/foo" &&
+							si.Components["@authority"] == "example.com"
+					})).
+					Return(KeyInfo{
+						Key:      Key{Material: tkEd25519, Algorithm: Ed25519},
+						Metadata: "ed25519",
+					}, nil).
+					Once()
+			},
+
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 2)
+
+				idx := slices.IndexFunc(results, func(sig VerifiedSignature) bool {
+					return sig.Label == "first"
+				})
+				require.NotEqual(t, -1, idx, "signature with label first not found")
+
+				sig := results[idx]
+				assert.Equal(t, "first", sig.Label)
+
+				assert.Len(t, sig.Components, 3)
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-shared-secret", sig.Parameters["keyid"])
+
+				assert.Equal(t, "hmac", sig.Metadata)
+
+				idx = slices.IndexFunc(results, func(sig VerifiedSignature) bool {
+					return sig.Label == "second"
+				})
+				require.NotEqual(t, -1, idx, "signature with label second not found")
+
+				sig = results[idx]
+				assert.Equal(t, "second", sig.Label)
+
+				assert.Len(t, sig.Components, 6)
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
+				assert.Equal(t, "POST", sig.Components["@method"])
+				assert.Equal(t, "/foo", sig.Components["@path"])
+				assert.Equal(t, "example.com", sig.Components["@authority"])
+				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "18", sig.Components["content-length"])
+
+				assert.Len(t, sig.Parameters, 2)
+				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
+				assert.Equal(t, "test-key-ed25519", sig.Parameters["keyid"])
+
+				assert.Equal(t, "ed25519", sig.Metadata)
 			},
 		},
 	} {
@@ -1624,8 +2034,8 @@ func TestVerifierVerify(t *testing.T) {
 			v, err := NewVerifier(kr, tc.opts...)
 			require.NoError(t, err)
 
-			err = v.Verify(tc.msg)
-			tc.assert(t, err)
+			results, err := v.Verify(tc.msg)
+			tc.assert(t, err, results)
 		})
 	}
 }

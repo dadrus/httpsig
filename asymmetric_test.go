@@ -39,7 +39,7 @@ func TestNewECDSASigner(t *testing.T) {
 		{uc: string(EcdsaP521Sha512), alg: EcdsaP521Sha512, key: pkp521},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newECDSASigner(tc.key, "test", tc.alg)
+			sig, err := newECDSASigner(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -47,7 +47,6 @@ func TestNewECDSASigner(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.privateKey)
 				assert.Equal(t, tc.alg, sig.algorithm())
 			}
@@ -78,7 +77,7 @@ func TestECDSASignerSignPayload(t *testing.T) {
 		{alg: EcdsaP521Sha512, key: pkp521},
 	} {
 		t.Run(string(tc.alg), func(t *testing.T) {
-			sig, err := newECDSASigner(tc.key, "test", tc.alg)
+			sig, err := newECDSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
 			res, err := sig.signPayload(message)
@@ -133,7 +132,7 @@ func TestNewRSASigner(t *testing.T) {
 		{uc: string(RsaPssSha512), alg: RsaPssSha512, key: pk4096},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newRSASigner(tc.key, "test", tc.alg)
+			sig, err := newRSASigner(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -141,7 +140,6 @@ func TestNewRSASigner(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.privateKey)
 				assert.Equal(t, tc.alg, sig.algorithm())
 			}
@@ -177,7 +175,7 @@ func TestRSASignerSignPayload(t *testing.T) {
 		{uc: "4096 key with RsaPssSha512", key: pk4096, alg: RsaPssSha512},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newRSASigner(tc.key, "test", tc.alg)
+			sig, err := newRSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
 			res, err := sig.signPayload(message)
@@ -227,7 +225,7 @@ func TestNewEd25519Signer(t *testing.T) {
 		{uc: "success", alg: Ed25519, key: privKey},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newEd25519Signer(tc.key, "test", tc.alg)
+			sig, err := newEd25519Signer(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -235,7 +233,6 @@ func TestNewEd25519Signer(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.privateKey)
 				assert.Equal(t, tc.alg, sig.algorithm())
 			}
@@ -251,7 +248,7 @@ func TestEd25519SignerSignPayload(t *testing.T) {
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	sig, err := newEd25519Signer(privKey, "test", Ed25519)
+	sig, err := newEd25519Signer(privKey, Ed25519)
 	require.NoError(t, err)
 
 	res, err := sig.signPayload(message)
@@ -287,7 +284,7 @@ func TestNewECDSAVerifier(t *testing.T) {
 		{uc: string(EcdsaP521Sha512), alg: EcdsaP521Sha512, key: &pkp521.PublicKey},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newECDSAVerifier(tc.key, "test", tc.alg)
+			sig, err := newECDSAVerifier(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -295,9 +292,7 @@ func TestNewECDSAVerifier(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.publicKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -391,14 +386,14 @@ func TestECDSAverifierVerifyPayload(t *testing.T) {
 				}
 			}
 
-			sig, err := newECDSASigner(tc.key, "test", tc.alg)
+			sig, err := newECDSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
 			res, err := sig.signPayload(message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
-			ver, err := newECDSAVerifier(&tc.key.PublicKey, "test", tc.alg)
+			ver, err := newECDSAVerifier(&tc.key.PublicKey, tc.alg)
 			require.NoError(t, err)
 
 			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
@@ -443,7 +438,7 @@ func TestNewRSAVerifier(t *testing.T) {
 		{uc: string(RsaPssSha512), alg: RsaPssSha512, key: &pk4096.PublicKey},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newRSAVerifier(tc.key, "test", tc.alg)
+			sig, err := newRSAVerifier(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -451,9 +446,7 @@ func TestNewRSAVerifier(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.publicKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -559,14 +552,14 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 				}
 			}
 
-			sig, err := newRSASigner(tc.key, "test", tc.alg)
+			sig, err := newRSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
 			res, err := sig.signPayload(message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
-			ver, err := newRSAVerifier(&tc.key.PublicKey, "test", tc.alg)
+			ver, err := newRSAVerifier(&tc.key.PublicKey, tc.alg)
 			require.NoError(t, err)
 
 			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
@@ -601,7 +594,7 @@ func TestNewEd25519Verifier(t *testing.T) {
 		{uc: "success", alg: Ed25519, key: pubKey},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newEd25519Verifier(tc.key, "test", tc.alg)
+			sig, err := newEd25519Verifier(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -609,9 +602,7 @@ func TestNewEd25519Verifier(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.publicKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -625,13 +616,13 @@ func TestEd25519VerifierVerifyPayload(t *testing.T) {
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	sig, err := newEd25519Signer(privKey, "test", Ed25519)
+	sig, err := newEd25519Signer(privKey, Ed25519)
 	require.NoError(t, err)
 
 	res, err := sig.signPayload(message)
 	require.NoError(t, err)
 
-	ver, err := newEd25519Verifier(pubKey, "test", sig.alg)
+	ver, err := newEd25519Verifier(pubKey, sig.alg)
 	require.NoError(t, err)
 
 	// valid signature

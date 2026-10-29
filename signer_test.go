@@ -55,7 +55,7 @@ func TestNewPayloadSigner(t *testing.T) {
 		{uc: "hmac signer", key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newPayloadSigner(tc.key, "test", tc.alg)
+			sig, err := newPayloadSigner(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -216,7 +216,7 @@ func TestNewSigner(t *testing.T) {
 		},
 		{
 			uc:   "error while applying configuration options",
-			key:  Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key:  Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{WithComponents("@test")},
 			assert: func(t *testing.T, err error, _ Signer) {
 				t.Helper()
@@ -227,7 +227,7 @@ func TestNewSigner(t *testing.T) {
 		},
 		{
 			uc:  "successful without configuration",
-			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			assert: func(t *testing.T, err error, sgnr Signer) {
 				t.Helper()
 
@@ -246,12 +246,13 @@ func TestNewSigner(t *testing.T) {
 		},
 		{
 			uc:  "successful with configuration",
-			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
 				WithComponents("@status"),
 				WithTag("foo"),
 				WithTTL(1 * time.Second),
 				WithLabel("bar"),
+				WithKeyID("test"),
 			},
 			assert: func(t *testing.T, err error, sgnr Signer) {
 				t.Helper()
@@ -339,7 +340,7 @@ func TestSignerSign(t *testing.T) {
 	}{
 		{
 			uc:  "failed creating signature parameters",
-			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
 			},
@@ -363,7 +364,7 @@ func TestSignerSign(t *testing.T) {
 		},
 		{
 			uc:  "failed updating message (adding content-digest)",
-			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
 				WithComponents("content-digest"),
 			},
@@ -390,7 +391,7 @@ func TestSignerSign(t *testing.T) {
 		},
 		{
 			uc:  "failed creating signature base",
-			key: Key{KeyID: "test", Algorithm: EcdsaP384Sha384, Key: pkp384},
+			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
 				WithComponents("@status"),
 			},
@@ -415,11 +416,12 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-minimal-signature-using-rsa
 			uc:  "B.2.1. minimal signature using rsa-pss-sha512",
-			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "b3k2pp5k7z-50gnwp.yemd", nil })),
 				WithLabel("sig-b21"),
 				WithTTL(0),
+				WithKeyID("test-key-rsa-pss"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -450,7 +452,7 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-selective-covered-component
 			uc:  "B.2.2. selective covered components using rsa-pss-sha512",
-			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b22"),
@@ -458,6 +460,7 @@ func TestSignerSign(t *testing.T) {
 				WithComponents("@authority", "content-digest", "@query-param;name=\"Pet\""),
 				WithTag("header-example"),
 				WithContentDigestAlgorithm(Sha512),
+				WithKeyID("test-key-rsa-pss"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -491,7 +494,7 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-full-coverage-using-rsa-pss
 			uc:  "B.2.3. full coverage using rsa-pss-sha512",
-			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b23"),
@@ -500,6 +503,7 @@ func TestSignerSign(t *testing.T) {
 					"date", "@method", "@path", "@query", "@authority", "content-type", "content-digest", "content-length",
 				),
 				WithContentDigestAlgorithm(Sha512),
+				WithKeyID("test-key-rsa-pss"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -533,13 +537,14 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-response-using-ec
 			uc:  "B.2.4. signing a response using ecdsa-p256-sha256",
-			key: Key{KeyID: "test-key-ecc-p256", Algorithm: EcdsaP256Sha256, Key: tkECCP256},
+			key: Key{Algorithm: EcdsaP256Sha256, Material: tkECCP256},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b24"),
 				WithTTL(0),
 				WithComponents("@status", "content-type", "content-digest", "content-length"),
 				WithContentDigestAlgorithm(Sha512),
+				WithKeyID("test-key-ecc-p256"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -571,12 +576,13 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-request-using-hma
 			uc:  "B.2.5. signing a request using hmac-sha256",
-			key: Key{KeyID: "test-shared-secret", Algorithm: HmacSha256, Key: tkMAC},
+			key: Key{Algorithm: HmacSha256, Material: tkMAC},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b25"),
 				WithTTL(0),
 				WithComponents("date", "@authority", "content-type"),
+				WithKeyID("test-shared-secret"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -606,12 +612,13 @@ func TestSignerSign(t *testing.T) {
 		{
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-request-using-ed2
 			uc:  "B.2.6. signing a request using ed25519",
-			key: Key{KeyID: "test-key-ed25519", Algorithm: Ed25519, Key: tkEd25519},
+			key: Key{Algorithm: Ed25519, Material: tkEd25519},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b26"),
 				WithTTL(0),
 				WithComponents("date", "@method", "@path", "@authority", "content-type", "content-length"),
+				WithKeyID("test-key-ed25519"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -640,13 +647,14 @@ func TestSignerSign(t *testing.T) {
 		},
 		{
 			uc:  "overwrites stale content-digest when signing content-digest component",
-			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-content-digest"),
 				WithTTL(0),
 				WithComponents("content-digest"),
 				WithContentDigestAlgorithm(Sha256),
+				WithKeyID("test-key-rsa-pss"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -684,13 +692,14 @@ func TestSignerSign(t *testing.T) {
 		},
 		{
 			uc:  "preserves existing content-digest when content-digest component is not signed",
-			key: Key{KeyID: "test-key-rsa-pss", Algorithm: RsaPssSha512, Key: tkRSAPSS},
+			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
 				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-no-content-digest"),
 				WithTTL(0),
 				WithComponents("date", "@method"),
 				WithContentDigestAlgorithm(Sha256),
+				WithKeyID("test-key-rsa-pss"),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,

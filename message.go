@@ -11,6 +11,10 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
+// MessageFromRequest creates a Message for signing or verifying an HTTP
+// request. Request headers are cloned. If the body must be read and req.GetBody
+// is unavailable, the original body is buffered and replaced so it remains
+// readable. Callers must enforce size limits for untrusted request bodies.
 func MessageFromRequest(req *http.Request) *Message {
 	var (
 		getBody      func() (io.ReadCloser, error)
@@ -52,6 +56,11 @@ func MessageFromRequest(req *http.Request) *Message {
 	}
 }
 
+// MessageFromResponse creates a Message from a received HTTP response and
+// its associated request. Response and request headers are cloned. The
+// response body may be buffered and restored when a covered component needs
+// it. The request body is available for ;req components only when the
+// associated request has a GetBody function.
 func MessageFromResponse(rw *http.Response) *Message {
 	var bodySnapshot []byte
 
@@ -93,6 +102,10 @@ func MessageFromResponse(rw *http.Response) *Message {
 	}
 }
 
+// MessageForResponse creates a Message for signing a response to req.
+// It clones the response and request headers and makes the supplied body
+// available for Content-Digest and other covered components. The request
+// body may be buffered and restored when a ;req component requires it.
 func MessageForResponse(req *http.Request, respHeader http.Header, body []byte, respCode int) *Message {
 	var bodySnapshot []byte
 
@@ -126,19 +139,41 @@ func MessageForResponse(req *http.Request, respHeader http.Header, body []byte, 
 	}
 }
 
-// Message is a representation of an HTTP request or response, containing the values
-// needed to construct or validate a signature.
+// Message represents the HTTP request or response data needed to construct
+// and verify an HTTP message signature. For a response, request-related
+// fields supply data used by component identifiers with the ;req parameter.
+// Not every field is necessarily covered by the signature.
 type Message struct {
-	Context       context.Context //nolint: containedctx
-	Method        string
-	Authority     string
-	URL           *url.URL
-	Header        http.Header
-	Body          func() (io.ReadCloser, error)
+	// Context is used for key resolution, nonce generation, and nonce checks.
+	Context context.Context //nolint: containedctx
+
+	// Method is the associated HTTP request method.
+	Method string
+
+	// Authority is the authority (host and optional port) of the request.
+	Authority string
+
+	// URL is the associated HTTP request URL.
+	URL *url.URL
+
+	// Header contains the headers of the request or response being processed.
+	// The signer may update this map with signatures and a Content-Digest.
+	Header http.Header
+
+	// Body opens the body of the request or response being processed.
+	Body func() (io.ReadCloser, error)
+
+	// RequestHeader contains the associated request headers for a response.
 	RequestHeader http.Header
-	RequestBody   func() (io.ReadCloser, error)
-	StatusCode    int
-	IsRequest     bool
+
+	// RequestBody opens the associated request body for response ;req components.
+	RequestBody func() (io.ReadCloser, error)
+
+	// StatusCode is the HTTP response status code (unused for requests).
+	StatusCode int
+
+	// IsRequest distinguishes requests from responses for canonicalization.
+	IsRequest bool
 }
 
 func (m *Message) addSignature(label string, signature []byte, signatureInput httpsfv.InnerList) (http.Header, error) {

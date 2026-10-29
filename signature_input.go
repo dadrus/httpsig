@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"time"
@@ -35,6 +36,79 @@ func newSignatureInput(
 		identifiers: identifiers,
 	}
 }
+
+func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
+	for _, identifier := range si.identifiers {
+		if identifier.Value == id.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (si *signatureInput) parameters() SignatureParameters {
+	result := make(SignatureParameters)
+
+	if si.value.Params == nil {
+		return result
+	}
+
+	for _, name := range si.value.Params.Names() {
+		value, _ := si.value.Params.Get(name)
+
+		switch v := value.(type) {
+		case httpsfv.Token:
+			value = Token(v)
+		case httpsfv.DisplayString:
+			value = string(v)
+		case []byte:
+			value = bytes.Clone(v)
+		}
+
+		result[name] = value
+	}
+
+	return result
+}
+
+func (si *signatureInput) parameter(name SignatureParameter) (any, bool) {
+	if si.value.Params == nil {
+		return nil, false
+	}
+
+	return si.value.Params.Get(string(name))
+}
+
+func (si *signatureInput) stringParameter(name SignatureParameter) (string, bool) {
+	value, present := si.parameter(name)
+	if !present {
+		return "", false
+	}
+
+	return value.(string), true //nolint: forcetypeassert
+}
+
+func (si *signatureInput) timestamp(name SignatureParameter) (time.Time, bool) {
+	value, present := si.parameter(name)
+	if !present {
+		return time.Time{}, false
+	}
+
+	return time.Unix(value.(int64), 0).UTC(), true //nolint: forcetypeassert
+}
+
+func (si *signatureInput) algorithm() (SignatureAlgorithm, bool) {
+	value, present := si.stringParameter(Alg)
+
+	return SignatureAlgorithm(value), present
+}
+
+func (si *signatureInput) created() (time.Time, bool) { return si.timestamp(Created) }
+func (si *signatureInput) expires() (time.Time, bool) { return si.timestamp(Expires) }
+func (si *signatureInput) nonce() (string, bool)      { return si.stringParameter(Nonce) }
+func (si *signatureInput) keyID() (string, bool)      { return si.stringParameter(KeyID) }
+func (si *signatureInput) tag() (string, bool)        { return si.stringParameter(Tag) }
 
 func parseSignatureInput(list httpsfv.InnerList) (*signatureInput, error) {
 	identifiers := make([]*componentIdentifier, 0, len(list.Items))
@@ -80,51 +154,3 @@ func validateSignatureInputParameters(params *httpsfv.Params) error {
 
 	return nil
 }
-
-func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
-	for _, identifier := range si.identifiers {
-		if identifier.Value == id.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (si *signatureInput) parameter(name SignatureParameter) (any, bool) {
-	if si.value.Params == nil {
-		return nil, false
-	}
-
-	return si.value.Params.Get(string(name))
-}
-
-func (si *signatureInput) stringParameter(name SignatureParameter) (string, bool) {
-	value, present := si.parameter(name)
-	if !present {
-		return "", false
-	}
-
-	return value.(string), true //nolint: forcetypeassert
-}
-
-func (si *signatureInput) timestamp(name SignatureParameter) (time.Time, bool) {
-	value, present := si.parameter(name)
-	if !present {
-		return time.Time{}, false
-	}
-
-	return time.Unix(value.(int64), 0).UTC(), true //nolint: forcetypeassert
-}
-
-func (si *signatureInput) algorithm() (SignatureAlgorithm, bool) {
-	value, present := si.stringParameter(Alg)
-
-	return SignatureAlgorithm(value), present
-}
-
-func (si *signatureInput) created() (time.Time, bool) { return si.timestamp(Created) }
-func (si *signatureInput) expires() (time.Time, bool) { return si.timestamp(Expires) }
-func (si *signatureInput) nonce() (string, bool)      { return si.stringParameter(Nonce) }
-func (si *signatureInput) keyID() (string, bool)      { return si.stringParameter(KeyID) }
-func (si *signatureInput) tag() (string, bool)        { return si.stringParameter(Tag) }

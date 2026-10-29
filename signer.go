@@ -12,34 +12,43 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-type Signer interface {
-	Sign(msg *Message) (http.Header, error)
-}
 
 type payloadSigner interface {
 	signPayload(data []byte) ([]byte, error)
 	algorithm() SignatureAlgorithm
-	keyID() string
 }
 
-func newPayloadSigner(signingKey any, keyID string, alg SignatureAlgorithm) (payloadSigner, error) {
+func newPayloadSigner(signingKey any, alg SignatureAlgorithm) (payloadSigner, error) {
 	switch key := signingKey.(type) {
 	case ed25519.PrivateKey:
-		return newEd25519Signer(key, keyID, alg)
+		return newEd25519Signer(key, alg)
 	case *rsa.PrivateKey:
-		return newRSASigner(key, keyID, alg)
+		return newRSASigner(key, alg)
 	case *ecdsa.PrivateKey:
-		return newECDSASigner(key, keyID, alg)
+		return newECDSASigner(key, alg)
 	case []byte:
-		return newSymmetricSigner(key, keyID, alg)
+		return newSymmetricSigner(key, alg)
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
 }
 
+// Signer creates HTTP message signatures using a configured key, set of
+// covered components, and signature parameters.
+type Signer interface {
+	// Sign signs msg and returns its updated HTTP headers, including the
+	// Signature and Signature-Input fields. It also updates msg.Header and
+	// may update Content-Digest when that component is covered.
+	Sign(msg *Message) (http.Header, error)
+}
+
+// SignerOption configures how a Signer constructs HTTP message signatures.
 type SignerOption func(s *signer) error
 
-// WithLabel sets the label of the signature in the Signature-Input and Signature headers.
+// WithLabel sets the desired Signature-Input and Signature dictionary label.
+// The default is "sig". An empty label is ignored; labels may be renamed
+// automatically if they collide with an existing signature in the message.
+// Labels are not signed and must not be used as identity information.
 func WithLabel(label string) SignerOption {
 	return func(s *signer) error {
 		if len(label) != 0 {
@@ -50,6 +59,9 @@ func WithLabel(label string) SignerOption {
 	}
 }
 
+// WithTTL sets how long the generated signature remains valid by controlling
+// its expires parameter. The default is 30 seconds. A non-positive duration
+// omits expires from the generated Signature-Input.
 func WithTTL(ttl time.Duration) SignerOption {
 	return func(s *signer) error {
 		s.ttl = ttl
@@ -58,7 +70,9 @@ func WithTTL(ttl time.Duration) SignerOption {
 	}
 }
 
-// WithComponents sets the HTTP fields / derived component names to be included in signing.
+// WithComponents selects HTTP fields and derived component identifiers to
+// cover with the signature. If "content-digest" is selected, signing also
+// generates or updates the Content-Digest field for the message body.
 func WithComponents(identifiers ...string) SignerOption {
 	return func(s *signer) error {
 		var err error
@@ -69,6 +83,8 @@ func WithComponents(identifiers ...string) SignerOption {
 	}
 }
 
+// WithTag sets the application-defined tag signature parameter. An empty
+// tag is ignored, leaving the tag parameter absent.
 func WithTag(tag string) SignerOption {
 	return func(s *signer) error {
 		if len(tag) != 0 {
@@ -79,6 +95,9 @@ func WithTag(tag string) SignerOption {
 	}
 }
 
+// WithNonce sets the source of the nonce signature parameter. By default,
+// the signer generates a random nonce. A nil getter leaves that default in
+// place; a getter returning an empty string causes nonce to be omitted.
 func WithNonce(ng NonceGetter) SignerOption {
 	return func(s *signer) error {
 		if ng != nil {
@@ -89,6 +108,10 @@ func WithNonce(ng NonceGetter) SignerOption {
 	}
 }
 
+// WithContentDigestAlgorithm selects the algorithm used to generate
+// Content-Digest when that component is covered. Without this option, the
+// signer generates both supported digests (SHA-256 and SHA-512).
+// Unsupported algorithms cause an error during NewSigner.
 func WithContentDigestAlgorithm(alg DigestAlgorithm) SignerOption {
 	return func(s *signer) error {
 		if _, known := supportedAlgs[alg]; !known {
@@ -101,9 +124,27 @@ func WithContentDigestAlgorithm(alg DigestAlgorithm) SignerOption {
 	}
 }
 
-// NewSigner creates a new signer with the given options.
+// WithKeyID adds the keyid signature parameter with the given key ID.
+// An empty value is ignored; no keyid is added unless this option supplies
+// a non-empty value.
+func WithKeyID(keyID string) SignerOption {
+	return func(s *signer) error {
+		if len(keyID) != 0 {
+			s.keyID = keyID
+		}
+
+		return nil
+	}
+}
+
+// NewSigner creates a Signer using key for cryptographic signing. The key
+// must contain private or symmetric material compatible with its algorithm.
+// By default, the generated signature uses label "sig", includes a created
+// timestamp and a random nonce, expires after 30 seconds, and includes the
+// selected key algorithm in the alg signature parameter. Use options to
+// select covered components and other signature parameters.
 func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
-	ps, err := newPayloadSigner(key.Key, key.KeyID, key.Algorithm)
+	ps, err := newPayloadSigner(key.Material, key.Algorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +185,7 @@ type signer struct {
 	ids   []*componentIdentifier
 	ttl   time.Duration
 	tag   string
+	keyID string
 	ng    NonceGetter
 	ps    payloadSigner
 	cdAlg DigestAlgorithm
@@ -193,7 +235,7 @@ func (s *signer) signatureInput(ctx context.Context) (*signatureInput, error) {
 		params.Add(string(Expires), created.Add(s.ttl).Unix())
 	}
 
-	if keyID := s.ps.keyID(); keyID != "" {
+	if keyID := s.keyID; keyID != "" {
 		params.Add(string(KeyID), keyID)
 	}
 

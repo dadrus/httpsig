@@ -10,28 +10,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWithExpectedKey(t *testing.T) {
+func TestWithExpectedSignatureAlgorithm(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc        string
-		key       Key
-		expKeyID  string
-		expKeyAlg SignatureAlgorithm
-	}{
-		{uc: "no actual data provided"},
-		{uc: "only KeyID provided", key: Key{KeyID: "test"}, expKeyID: "test"},
-		{uc: "only KeyAlg provided", key: Key{Algorithm: RsaPssSha512}, expKeyAlg: RsaPssSha512},
-		{uc: "KeyID and KeyAlg provided", key: Key{KeyID: "foo", Algorithm: EcdsaP256Sha256}, expKeyID: "foo", expKeyAlg: EcdsaP256Sha256},
+	for uc, alg := range map[string]SignatureAlgorithm{
+		"no actual data provided": SignatureAlgorithm(""),
+		"KeyAlg provided":         RsaPssSha512,
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{}
 
-			err := WithExpectedKey(tc.key)(asb)
+			err := WithExpectedSignatureAlgorithm(alg)(asb)
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.expKeyID, asb.keyID)
-			assert.Equal(t, tc.expKeyAlg, asb.keyAlgorithm)
+			assert.Equal(t, alg, asb.signatureAlgorithm)
+		})
+	}
+}
+
+func TestWithExpectedKeyID(t *testing.T) {
+	t.Parallel()
+
+	for uc, keyID := range map[string]string{
+		"no actual data provided": "",
+		"KeyAlg provided":         "test",
+	} {
+		t.Run(uc, func(t *testing.T) {
+			asb := &AcceptSignatureBuilder{}
+
+			err := WithExpectedKeyID(keyID)(asb)
+
+			require.NoError(t, err)
+			assert.Equal(t, keyID, asb.keyID)
 		})
 	}
 }
@@ -255,7 +265,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				assert.Empty(t, asb.identifiers)
 				assert.Empty(t, asb.tag)
 				assert.Empty(t, asb.keyID)
-				assert.Empty(t, asb.keyAlgorithm)
+				assert.Empty(t, asb.signatureAlgorithm)
 				assert.True(t, asb.addCreatedTS)
 				assert.True(t, asb.addExpiresTS)
 				assert.Equal(t, nonceGetter{}, asb.nonceGetter)
@@ -269,7 +279,8 @@ func TestNewAcceptedSignature(t *testing.T) {
 		{
 			uc: "all possible options provided",
 			opts: []AcceptSignatureOption{
-				WithExpectedKey(Key{KeyID: "test", Algorithm: EcdsaP256Sha256}),
+				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
+				WithExpectedKeyID("test"),
 				WithExpectedNonce(&NonceGetterMock{}),
 				WithExpectedLabel("foo"),
 				WithExpectedComponents("@status", "content-digest;req"),
@@ -288,7 +299,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				assert.Equal(t, "content-digest", asb.identifiers[1].Value)
 				assert.Equal(t, "bar", asb.tag)
 				assert.Equal(t, "test", asb.keyID)
-				assert.Equal(t, EcdsaP256Sha256, asb.keyAlgorithm)
+				assert.Equal(t, EcdsaP256Sha256, asb.signatureAlgorithm)
 				assert.False(t, asb.addCreatedTS)
 				assert.False(t, asb.addExpiresTS)
 				assert.Equal(t, &NonceGetterMock{}, asb.nonceGetter)
@@ -345,7 +356,8 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature only is added",
 			opts: []AcceptSignatureOption{
-				WithExpectedKey(Key{KeyID: "test", Algorithm: EcdsaP256Sha256}),
+				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
+				WithExpectedKeyID("test"),
 				WithExpectedComponents("@status", "x-foo-bar;req", "@method"),
 				WithExpectedLabel("foo"),
 				WithExpectedTag("bar"),
@@ -366,7 +378,8 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature and Want-Content-Digest headers are added with default algorithms",
 			opts: []AcceptSignatureOption{
-				WithExpectedKey(Key{KeyID: "test", Algorithm: EcdsaP256Sha256}),
+				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
+				WithExpectedKeyID("test"),
 				WithExpectedComponents("@status", "content-digest", "@method"),
 				WithExpectedLabel("foo"),
 				WithExpectedTag("bar"),
@@ -389,7 +402,8 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature and Want-Content-Digest headers are added with supplied algorithms",
 			opts: []AcceptSignatureOption{
-				WithExpectedKey(Key{KeyID: "test", Algorithm: EcdsaP256Sha256}),
+				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
+				WithExpectedKeyID("test"),
 				WithExpectedComponents("@status", "content-digest", "@method"),
 				WithExpectedLabel("foo"),
 				WithExpectedTag("bar"),

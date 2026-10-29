@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-func newSymmetricSigner(key []byte, kid string, alg SignatureAlgorithm) (*symmetricSigner, error) {
+func newSymmetricSigner(key []byte, alg SignatureAlgorithm) (*symmetricSigner, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -24,7 +24,6 @@ func newSymmetricSigner(key []byte, kid string, alg SignatureAlgorithm) (*symmet
 	return &symmetricSigner{
 		alg:  alg,
 		key:  key,
-		kid:  kid,
 		hash: hash,
 	}, nil
 }
@@ -32,11 +31,8 @@ func newSymmetricSigner(key []byte, kid string, alg SignatureAlgorithm) (*symmet
 type symmetricSigner struct {
 	alg  SignatureAlgorithm
 	key  []byte
-	kid  string
 	hash crypto.Hash
 }
-
-func (ms *symmetricSigner) keyID() string { return ms.kid }
 
 func (ms *symmetricSigner) algorithm() SignatureAlgorithm { return ms.alg }
 
