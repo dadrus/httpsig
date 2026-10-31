@@ -148,7 +148,6 @@ func WithValidateAllSignatures() VerifierOption {
 // be present. If present, it is still checked even when flag is false.
 // NewVerifier requires created by default.
 func WithCreatedTimestampRequired(flag bool) VerifierOption {
-	// TODO: Same challenge as WithExpiredTimestampRequired
 	return func(_ *verifier, exp *expectations, _ bool) error {
 		exp.reqCreatedTS = &flag
 
@@ -160,8 +159,6 @@ func WithCreatedTimestampRequired(flag bool) VerifierOption {
 // be present. If present, it is still checked even when flag is false.
 // NewVerifier requires expires by default.
 func WithExpiredTimestampRequired(flag bool) VerifierOption {
-	// TODO: if the flag is false, then the expires parameter must not be present in the signature. This must be checked.
-	// There is a need to think more about the semantics as different rfcs have different requirements on that parameter
 	return func(_ *verifier, exp *expectations, _ bool) error {
 		exp.reqExpiresTS = &flag
 
