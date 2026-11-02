@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -77,11 +76,11 @@ func TestExpectationsAssertParameters(t *testing.T) {
 	trueVal := true
 
 	for _, tc := range []struct {
-		uc        string
-		params    httpsfv.InnerList
-		exp       expectations
-		expAlg    SignatureAlgorithm
-		assert    func(t *testing.T, err error)
+		uc     string
+		params httpsfv.InnerList
+		exp    expectations
+		expAlg SignatureAlgorithm
+		assert func(t *testing.T, err error)
 	}{
 		{
 			uc: "signature algorithm mismatch",
@@ -333,281 +332,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 	}
 }
 
-func TestWithComponentsForVerifier(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc          string
-		identifiers []string
-		err         error
-	}{
-		{uc: "multiple valid identifier", identifiers: []string{"@status;req", "@method"}},
-		{uc: "invalid identifier", identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			v := &verifier{}
-			exp := &expectations{}
-
-			err := WithComponents(tc.identifiers...).applyVerifierOption(v, exp, false)
-
-			if tc.err != nil {
-				require.Error(t, err)
-				require.ErrorIs(t, err, tc.err)
-			} else {
-				require.NoError(t, err)
-				assert.Empty(t, v.tagExpectations)
-				require.Len(t, exp.identifiers, len(tc.identifiers))
-
-				for i, id := range exp.identifiers {
-					vals := strings.Split(tc.identifiers[i], ";")
-					assert.Equal(t, vals[0], id.Value)
-				}
-			}
-		})
-	}
-}
-
-func TestWithValidityTolerance(t *testing.T) {
-	t.Parallel()
-
-	v := &verifier{}
-	exp := &expectations{}
-
-	err := WithValidityTolerance(1*time.Minute).applyVerifierOption(v, exp, false)
-	require.NoError(t, err)
-
-	assert.Empty(t, v.tagExpectations)
-	assert.Equal(t, 1*time.Minute, exp.tolerance)
-}
-
-func TestWithRequiredTag(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc     string
-		opts   []VerifierOption
-		assert func(t *testing.T, err error, exp *expectations)
-	}{
-		{
-			uc: "without options",
-			assert: func(t *testing.T, err error, exp *expectations) {
-				t.Helper()
-
-				require.NoError(t, err)
-				require.NotNil(t, exp)
-				assert.Empty(t, exp.identifiers)
-				assert.Equal(t, time.Duration(-1), exp.tolerance) //nolint:testifylint
-			},
-		},
-		{
-			uc: "with identifiers only",
-			opts: []VerifierOption{
-				WithComponents("@status"),
-			},
-			assert: func(t *testing.T, err error, exp *expectations) {
-				t.Helper()
-
-				require.NoError(t, err)
-				require.NotNil(t, exp)
-				assert.Len(t, exp.identifiers, 1)
-				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, time.Duration(-1), exp.tolerance) //nolint:testifylint
-			},
-		},
-		{
-			uc: "with tolerance only",
-			opts: []VerifierOption{
-				WithValidityTolerance(5 * time.Minute),
-			},
-			assert: func(t *testing.T, err error, exp *expectations) {
-				t.Helper()
-
-				require.NoError(t, err)
-				require.NotNil(t, exp)
-				assert.Empty(t, exp.identifiers)
-				assert.Equal(t, 5*time.Minute, exp.tolerance)
-			},
-		},
-		{
-			uc: "with all possible options",
-			opts: []VerifierOption{
-				WithComponents("@status"),
-				WithValidityTolerance(5 * time.Minute),
-			},
-			assert: func(t *testing.T, err error, exp *expectations) {
-				t.Helper()
-
-				require.NoError(t, err)
-				require.NotNil(t, exp)
-				assert.Len(t, exp.identifiers, 1)
-				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 5*time.Minute, exp.tolerance)
-			},
-		},
-		{
-			uc: "with unsupported identifier",
-			opts: []VerifierOption{
-				WithComponents("@foo"),
-			},
-			assert: func(t *testing.T, err error, exp *expectations) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
-				require.Nil(t, exp)
-			},
-		},
-		{
-			uc: "with nested WithRequiredTag",
-			opts: []VerifierOption{
-				WithRequiredTag("foo"),
-			},
-			assert: func(t *testing.T, err error, _ *expectations) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorContains(t, err, "WithRequiredTag")
-			},
-		},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			v := &verifier{tagExpectations: make(map[string]*expectations)}
-
-			recoverIfPanics := func(t *testing.T, f func() error) (err error) {
-				t.Helper()
-
-				defer func() {
-					var ok bool
-
-					if res := recover(); res != nil {
-						if err, ok = res.(error); !ok {
-							err = fmt.Errorf("%v", res)
-						}
-					}
-				}()
-
-				err = f()
-
-				return
-			}
-
-			err := recoverIfPanics(t, func() error {
-				return WithRequiredTag("test", tc.opts...).applyVerifierOption(v, nil, false)
-			})
-			if err == nil {
-				require.Len(t, v.tagExpectations, 1)
-			}
-
-			tc.assert(t, err, v.tagExpectations["test"])
-		})
-	}
-
-	t.Run("with duplicate WithRequiredTag", func(t *testing.T) {
-		v := &verifier{tagExpectations: map[string]*expectations{"foo": {}}}
-
-		err := WithRequiredTag("foo", nil).applyVerifierOption(v, nil, false)
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrParameter)
-		require.ErrorContains(t, err, "already configured")
-	})
-}
-
-func TestWithMaxAge(t *testing.T) {
-	t.Parallel()
-
-	v := &verifier{}
-	exp := &expectations{}
-
-	err := WithMaxAge(15*time.Minute).applyVerifierOption(v, exp, false)
-	require.NoError(t, err)
-
-	assert.Equal(t, 15*time.Minute, exp.maxAge)
-}
-
-func TestWithSignatureNegotiation(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc     string
-		opts   []SignatureNegotiationOption
-		assert func(t *testing.T, err error, asb *AcceptSignatureBuilder)
-	}{
-		{
-			uc: "without options",
-			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
-				t.Helper()
-
-				require.NoError(t, err)
-
-				require.NotNil(t, asb)
-				assert.IsType(t, nonceGetter{}, asb.nonceGetter)
-				assert.Equal(t, "sig", asb.label)
-				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
-				assert.Empty(t, asb.signatureAlgorithm)
-				assert.Empty(t, asb.keyID)
-				// not set by any of the options
-				assert.True(t, asb.addCreatedTS)
-				assert.True(t, asb.addExpiresTS)
-				assert.False(t, asb.wantContentDigest)
-				assert.Empty(t, asb.tag)
-				assert.Empty(t, asb.identifiers)
-			},
-		},
-		{
-			uc: "with all possible options",
-			opts: []SignatureNegotiationOption{
-				WithLabel("foo"),
-				WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
-				WithSignatureAlgorithm(RsaPssSha512),
-				WithKeyID("bar"),
-				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
-			},
-			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
-				t.Helper()
-
-				require.NoError(t, err)
-
-				require.NotNil(t, asb)
-				require.NotNil(t, asb.nonceGetter)
-				nonce, err := asb.nonceGetter.GetNonce(context.TODO())
-				require.NoError(t, err)
-				require.Equal(t, "abc", nonce)
-				assert.Equal(t, "foo", asb.label)
-				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-512=2"})
-				assert.Equal(t, RsaPssSha512, asb.signatureAlgorithm)
-				assert.Equal(t, "bar", asb.keyID)
-				// not set by any of the options
-				assert.True(t, asb.addCreatedTS)
-				assert.True(t, asb.addExpiresTS)
-				assert.False(t, asb.wantContentDigest)
-				assert.Empty(t, asb.tag)
-				assert.Empty(t, asb.identifiers)
-			},
-		},
-		{
-			uc: "with error while applying the option",
-			opts: []SignatureNegotiationOption{
-				WithContentDigestAlgorithmPreferences(AlgorithmPreference{}),
-			},
-			assert: func(t *testing.T, err error, _ *AcceptSignatureBuilder) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrParameter)
-			},
-		},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			v := &verifier{}
-			exp := &expectations{}
-
-			err := WithSignatureNegotiation(tc.opts...).applyVerifierOption(v, exp, false)
-
-			tc.assert(t, err, exp.asb)
-		})
-	}
-}
-
 func TestNewVerifier(t *testing.T) {
 	t.Parallel()
 
@@ -775,7 +499,7 @@ func TestNewVerifier(t *testing.T) {
 				assert.Equal(t, "content-digest", exp.identifiers[1].Value)
 				assert.Equal(t, 1*time.Second, exp.tolerance)
 				require.NotNil(t, exp.asb)
-				assert.IsType(t, nonceGetter{}, exp.asb.nonceGetter)
+				assert.Nil(t, exp.asb.nonceGetter)
 				assert.Equal(t, "sig", exp.asb.label)
 				assert.ElementsMatch(t, exp.asb.cdAlgPrefs, []string{"sha-256=5", "sha-512=10"})
 				assert.Equal(t, RsaPssSha512, exp.asb.signatureAlgorithm)
@@ -998,7 +722,7 @@ func TestVerifierVerify(t *testing.T) {
 				IsRequest: true,
 			},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
-			assert: func(t *testing.T, err error, results VerificationResult) {
+			assert: func(t *testing.T, err error, _ VerificationResult) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -1152,7 +876,7 @@ func TestVerifierVerify(t *testing.T) {
 						WithSignatureAlgorithm(RsaPssSha512),
 						WithKeyID("test-key"),
 						WithLabel("bar"),
-						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+						WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 						WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
 					),
 				),
@@ -1177,6 +901,30 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 		{
+			uc: "signature negotiation without nonce getter omits nonce",
+			opts: []VerifierOption{
+				WithRequiredTag("foo",
+					WithComponents("@method"),
+					WithSignatureNegotiation(WithLabel("foo-sig")),
+				),
+			},
+			msg:               &Message{Header: http.Header{}},
+			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				var targetErr *NoApplicableSignatureError
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorAs(t, err, &targetErr)
+
+				hdr := make(http.Header)
+				targetErr.Negotiate(hdr)
+
+				assert.Equal(t, `foo-sig=("@method");created;expires;tag="foo"`, hdr.Get(headerAcceptSignature))
+			},
+		},
+		{
 			uc: "signature parameters negotiation for present signature with missing expires parameters",
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
@@ -1184,7 +932,7 @@ func TestVerifierVerify(t *testing.T) {
 						WithSignatureAlgorithm(RsaPssSha512),
 						WithKeyID("test-key"),
 						WithLabel("bar"),
-						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
+						WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 						WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
 					),
 				),
@@ -1246,7 +994,7 @@ func TestVerifierVerify(t *testing.T) {
 					WithSignatureNegotiation(
 						WithSignatureAlgorithm(RsaPssSha512),
 						WithKeyID("test-key"),
-						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
+						WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
 					),
 				),
 			},
@@ -1780,7 +1528,7 @@ func TestVerifierVerify(t *testing.T) {
 				sig := results[0]
 				assert.Equal(t, "valid", sig.Label)
 
-				assert.Len(t, sig.Components, 0)
+				assert.Empty(t, sig.Components)
 
 				assert.Len(t, sig.Parameters, 3)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])

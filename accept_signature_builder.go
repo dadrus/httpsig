@@ -39,14 +39,13 @@ type AcceptSignatureBuilder struct {
 }
 
 // NewAcceptSignature creates an AcceptSignatureBuilder for requesting a
-// signature from a peer. By default, it uses label "sig", requests created and
-// expires parameters, and generates a random nonce. If Content-Digest is requested,
-// the default digest preferences are SHA-256 and SHA-512.
+// signature from a peer. By default, it uses label "sig", requests created
+// and expires parameters, and does not request a nonce. If Content-Digest
+// is requested, the default digest preferences are SHA-256 and SHA-512.
 func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder, error) {
 	asb := &AcceptSignatureBuilder{
 		addCreatedTS: true,
 		addExpiresTS: true,
-		nonceGetter:  nonceGetter{},
 		label:        "sig",
 		cdAlgPrefs: []string{
 			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),  //nolint: mnd
@@ -65,12 +64,32 @@ func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder,
 
 // Build appends an Accept-Signature header to header using the configured
 // signature requirements. If Content-Digest is requested, it also appends
-// Want-Content-Digest preferences. The caller must provide a writable, non-nil
-// http.Header.
-func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header) error {
-	nonce, err := asb.nonceGetter.GetNonce(ctx)
-	if err != nil {
-		return err
+// Want-Content-Digest preferences. A non-empty nonce may be provided for this
+// call with WithParameter("nonce", value), overriding a configured
+// WithNonceGetter without invoking it. Otherwise, the configured getter is
+// used if present; if neither is provided, no nonce is requested. Options
+// do not modify this reusable builder. The caller must provide a writable,
+// non-nil http.Header.
+func (asb *AcceptSignatureBuilder) Build(
+	ctx context.Context,
+	header http.Header,
+	opts ...AcceptSignatureBuildOption,
+) error {
+	callOptions := acceptSignatureBuildOptions{}
+	for _, opt := range opts {
+		if err := opt.applyAcceptSignatureBuildOption(&callOptions); err != nil {
+			return err
+		}
+	}
+
+	nonce := callOptions.nonce
+	if !callOptions.nonceSet && asb.nonceGetter != nil {
+		var err error
+
+		nonce, err = asb.nonceGetter.GetNonce(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	sigReqs := newSignatureRequirements(

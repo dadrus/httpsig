@@ -188,7 +188,7 @@ const (
 // SignatureParameters contains all signature parameters transmitted in a
 // Signature-Input entry, including profile-specific extensions. Keys are the
 // parameter names; values are decoded Structured Fields bare items (for
-// example string, Token, int64, float64, bool, []byte, or time.Time).
+// example string, Token, int64, float64, bool, or []byte).
 // Display Strings are exposed as ordinary strings.
 type SignatureParameters map[string]any
 
@@ -252,19 +252,14 @@ type SignatureInfo struct {
 }
 
 // KeyResolver resolves a trusted verification key for a specific HTTP message
-// signature. The resolver implementation is responsible for establishing trust
-// in the key // material and any required binding to a key source or credential.
-// Returning KeyInfo without an error indicates that the key is acceptable for this
-// verification attempt.
-//
-// ResolveKey is called before cryptographic verification. SignatureInfo and
-// its Message contain unverified, potentially sender-controlled data. A
-// resolver must not treat this data as an authenticated identity or use it
-// for unrestricted remote lookups. It must not mutate SignatureInfo.Message,
-// Components, Parameters, or their mutable contents: these are shared with
-// the verification process and, on success, with VerifiedSignature.
+// signature.
 type KeyResolver interface {
 	// ResolveKey returns the trusted key and optional metadata for info.
+	// It is called before cryptographic verification. SignatureInfo and its
+	// Message contain unverified, sender-controlled data. The implementation
+	// must not mutate SignatureInfo.Message, Components, Parameters, or their
+	// mutable contents: these are shared with the verification process and, on
+	// success, with VerifiedSignature.
 	ResolveKey(ctx context.Context, info SignatureInfo) (KeyInfo, error)
 }
 

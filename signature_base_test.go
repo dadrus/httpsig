@@ -62,8 +62,7 @@ func TestNewSignatureBase(t *testing.T) {
 "content-type": application/json
 "@signature-params": ("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884473;keyid="test-key-rsa-pss"`
 
-				sigBase, err := base.marshal()
-				require.NoError(t, err)
+				sigBase := base.marshal()
 
 				assert.Equal(t, expected, string(sigBase))
 			},
@@ -121,8 +120,7 @@ func TestNewSignatureBase(t *testing.T) {
 "@query-param";name="Cat": meow
 "@signature-params": ("@query-param";name="Pet" "@query-param";name="Cat");created=1618884473;keyid="test-key-rsa-pss"`
 
-				sigBase, err := base.marshal()
-				require.NoError(t, err)
+				sigBase := base.marshal()
 
 				assert.Equal(t, expected, string(sigBase))
 			},
@@ -155,8 +153,7 @@ func TestSignatureBaseMarshal(t *testing.T) {
 		},
 	}
 
-	res, err := base.marshal()
-	require.NoError(t, err)
+	res := base.marshal()
 
 	assert.Equal(t, "\"@authority\": foo.bar\n\"@method\": GET", string(res))
 }
@@ -246,8 +243,7 @@ func TestSignatureBaseComponents(t *testing.T) {
 				signatureParams: tc.signatureParams,
 			}
 
-			components, err := base.components()
-			require.NoError(t, err)
+			components := base.components()
 
 			assert.Equal(t, tc.expected, components)
 		})

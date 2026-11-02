@@ -1,7 +1,6 @@
 package httpsig
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -44,8 +43,8 @@ type Signer interface {
 
 // NewSigner creates a Signer using key for cryptographic signing. The key
 // must contain private or symmetric material compatible with its algorithm.
-// By default, signatures use label "sig", include created and a random nonce,
-// and expire after 30 seconds. The alg, keyid, and tag parameters are omitted.
+// By default, signatures use label "sig", include created, and expire
+// after 30 seconds. The alg, keyid, tag, and nonce parameters are omitted.
 // When generating Content-Digest, the signer uses both SHA-256 and SHA-512
 // unless WithContentDigestAlgorithm selects one.
 func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
@@ -57,7 +56,6 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	sig := &signer{
 		label: "sig",
 		ttl:   30 * time.Second, //nolint:mnd
-		ng:    nonceGetter{},
 		ps:    ps,
 		mu:    noopMessageUpdater{},
 	}
@@ -101,7 +99,6 @@ type signer struct {
 	tag        string
 	keyID      string
 	includeAlg bool
-	ng         NonceGetter
 	ps         payloadSigner
 	cdAlg      DigestAlgorithm
 	parameters []parameterOption
@@ -116,12 +113,9 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 		}
 	}
 
-	params, err := s.signatureInput(msg.Context, callOptions)
-	if err != nil {
-		return nil, err
-	}
+	params := s.signatureInput(callOptions)
 
-	if err = s.mu.update(msg); err != nil {
+	if err := s.mu.update(msg); err != nil {
 		return nil, err
 	}
 
@@ -130,12 +124,7 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 		return nil, err
 	}
 
-	sb, err := base.marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	signature, err := s.ps.signPayload(sb)
+	signature, err := s.ps.signPayload(base.marshal())
 	if err != nil {
 		return nil, err
 	}
@@ -148,17 +137,8 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 	return msg.addSignature(label, signature, params.value)
 }
 
-func (s *signer) signatureInput(ctx context.Context, opts signOptions) (*signatureInput, error) {
+func (s *signer) signatureInput(opts signOptions) *signatureInput {
 	created := currentTime().UTC()
-
-	nonce := opts.nonce
-	if !opts.nonceSet {
-		var err error
-		nonce, err = s.ng.GetNonce(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	params := httpsfv.NewParams()
 	params.Add(string(Created), created.Unix())
@@ -175,8 +155,8 @@ func (s *signer) signatureInput(ctx context.Context, opts signOptions) (*signatu
 		params.Add(string(Alg), string(s.ps.algorithm()))
 	}
 
-	if len(nonce) != 0 {
-		params.Add(string(Nonce), nonce)
+	if opts.nonceSet {
+		params.Add(string(Nonce), opts.nonce)
 	}
 
 	if len(s.tag) != 0 {
@@ -191,5 +171,5 @@ func (s *signer) signatureInput(ctx context.Context, opts signOptions) (*signatu
 		params.Add(param.name, param.value)
 	}
 
-	return newSignatureInput(s.ids, params), nil
+	return newSignatureInput(s.ids, params)
 }

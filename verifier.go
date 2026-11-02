@@ -48,8 +48,8 @@ type Verifier interface {
 // NewVerifier creates a Verifier instance.
 // Without WithValidateAllSignatures, at least one WithRequiredTag is necessary.
 // By default, created and expires are required and signatures may be at most
-// 30 seconds old. The default nonce checker does not reject any nonce.
-// Global WithSignatureNegotiation cannot be combined with
+// 30 seconds old. Optional created or expires parameters are still checked
+// when present. Global WithSignatureNegotiation cannot be combined with
 // WithValidateAllSignatures. More specific requirements can be set through opts.
 //
 //nolint:cyclop
@@ -371,11 +371,7 @@ func (v *verifier) verifySignature(
 		return VerifiedSignature{}, err
 	}
 
-	components, err := base.components()
-	if err != nil {
-		return VerifiedSignature{}, err
-	}
-
+	components := base.components()
 	params := si.parameters()
 
 	keyInfo, err := v.keyResolver.ResolveKey(msg.Context, SignatureInfo{
@@ -397,12 +393,7 @@ func (v *verifier) verifySignature(
 		return VerifiedSignature{}, err
 	}
 
-	sb, err := base.marshal()
-	if err != nil {
-		return VerifiedSignature{}, err
-	}
-
-	err = verifier.verifyPayload(sb, signature)
+	err = verifier.verifyPayload(base.marshal(), signature)
 	if err != nil {
 		return VerifiedSignature{}, err
 	}

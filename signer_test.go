@@ -1,7 +1,6 @@
 package httpsig
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -64,130 +63,6 @@ func TestNewPayloadSigner(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
 				require.IsType(t, tc.typ, sig)
-			}
-		})
-	}
-}
-
-func TestWithLabel(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc           string
-		label        string
-		shouldUpdate bool
-	}{
-		{uc: "empty label", label: "", shouldUpdate: false},
-		{uc: "not empty label", label: "foo", shouldUpdate: true},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			s := &signer{label: "test"}
-
-			err := WithLabel(tc.label).applySignerOption(s)
-			require.NoError(t, err)
-
-			if tc.shouldUpdate {
-				require.Equal(t, tc.label, s.label)
-			} else {
-				require.Equal(t, "test", s.label)
-			}
-		})
-	}
-}
-
-func TestWithTTL(t *testing.T) {
-	t.Parallel()
-
-	ttl := 1 * time.Second
-	s := &signer{ttl: 30 * time.Second}
-
-	err := WithTTL(ttl).applySignerOption(s)
-
-	require.NoError(t, err)
-	require.Equal(t, ttl, s.ttl)
-}
-
-func TestWithComponentsForSigner(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc          string
-		identifiers []string
-		err         error
-	}{
-		{uc: "multiple valid identifier", identifiers: []string{"@status;req", "@method"}},
-		{uc: "invalid identifier", identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			s := &signer{}
-
-			err := WithComponents(tc.identifiers...).applySignerOption(s)
-
-			if tc.err != nil {
-				require.Error(t, err)
-				require.ErrorIs(t, err, tc.err)
-			} else {
-				require.NoError(t, err)
-				require.Len(t, s.ids, len(tc.identifiers))
-
-				for i, id := range s.ids {
-					vals := strings.Split(tc.identifiers[i], ";")
-					assert.Equal(t, vals[0], id.Value)
-				}
-			}
-		})
-	}
-}
-
-func TestWithTag(t *testing.T) {
-	t.Parallel()
-
-	s := &signer{}
-
-	err := WithTag("test").applySignerOption(s)
-	require.NoError(t, err)
-
-	assert.Equal(t, "test", s.tag)
-}
-
-func TestWithNonceGetter(t *testing.T) {
-	t.Parallel()
-
-	s := &signer{}
-
-	err := WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) {
-		return "foo", nil
-	})).applySignerOption(s)
-	require.NoError(t, err)
-
-	nonce, err := s.ng.GetNonce(context.TODO())
-	require.NoError(t, err)
-
-	assert.Equal(t, "foo", nonce)
-}
-
-func TestWithContentDigestAlgorithm(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		uc  string
-		alg DigestAlgorithm
-		err error
-	}{
-		{uc: "valid algorithm", alg: Sha512},
-		{uc: "invalid algorithm", alg: DigestAlgorithm("md4"), err: ErrUnsupportedAlgorithm},
-	} {
-		t.Run(tc.uc, func(t *testing.T) {
-			s := &signer{}
-
-			err := WithContentDigestAlgorithm(tc.alg).applySignerOption(s)
-
-			if tc.err != nil {
-				require.Error(t, err)
-				require.ErrorIs(t, err, tc.err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.alg, s.cdAlg)
 			}
 		})
 	}
@@ -297,7 +172,6 @@ func TestNewSigner(t *testing.T) {
 				assert.Equal(t, "sig", s.label)
 				assert.Equal(t, 30*time.Second, s.ttl)
 				assert.IsType(t, &ecdsaSigner{}, s.ps)
-				assert.NotNil(t, s.ng)
 				assert.Empty(t, s.tag)
 				assert.Empty(t, s.ids)
 			},
@@ -323,7 +197,6 @@ func TestNewSigner(t *testing.T) {
 				assert.Equal(t, "bar", s.label)
 				assert.Equal(t, 1*time.Second, s.ttl)
 				assert.IsType(t, &ecdsaSigner{}, s.ps)
-				assert.NotNil(t, s.ng)
 				assert.Equal(t, "foo", s.tag)
 				assert.NotEmpty(t, s.ids)
 			},
@@ -396,27 +269,14 @@ func TestSignerSign(t *testing.T) {
 		assert   func(t *testing.T, err error, header http.Header)
 	}{
 		{
-			uc:  "failed creating signature parameters",
-			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
-			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
-			},
-			msg: &Message{
-				Method:    http.MethodPost,
-				Authority: "example.com",
-				URL:       testURL,
-				Header: http.Header{
-					"Host":           []string{"example.com"},
-					"Date":           []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
-					"Content-Type":   []string{"application/json"},
-					"Content-Length": []string{"18"},
-				},
-				IsRequest: true,
-			},
-			assert: func(t *testing.T, err error, _ http.Header) {
+			uc:   "signer omits nonce unless supplied per call",
+			key:  Key{Algorithm: HmacSha256, Material: []byte("secret")},
+			opts: []SignerOption{WithTTL(0)},
+			msg:  &Message{Header: http.Header{}, IsRequest: true},
+			assert: func(t *testing.T, err error, header http.Header) {
 				t.Helper()
-
-				require.Error(t, err)
+				require.NoError(t, err)
+				assert.Equal(t, `sig=();created=1618884473`, header.Get("Signature-Input"))
 			},
 		},
 		{
@@ -475,7 +335,6 @@ func TestSignerSign(t *testing.T) {
 			key: Key{Algorithm: HmacSha256, Material: []byte("secret")},
 			opts: []SignerOption{
 				WithTTL(0),
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithParameter("example-token", Token("hello")),
 				WithParameter("example-bytes", []byte("data")),
 			},
@@ -492,7 +351,6 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithTTL(0),
 				WithLabel("static"),
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 			},
 			signOpts: []SignOption{WithLabel("dynamic")},
 			msg:      &Message{Header: http.Header{}, IsRequest: true},
@@ -503,11 +361,10 @@ func TestSignerSign(t *testing.T) {
 			},
 		},
 		{
-			uc:  "per-call nonce overrides configured getter",
+			uc:  "per-call nonce is included",
 			key: Key{Algorithm: HmacSha256, Material: []byte("secret")},
 			opts: []SignerOption{
 				WithTTL(0),
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("getter must not be called") })),
 			},
 			signOpts: []SignOption{WithParameter("nonce", "requested-nonce")},
 			msg:      &Message{Header: http.Header{}, IsRequest: true},
@@ -522,7 +379,6 @@ func TestSignerSign(t *testing.T) {
 			key: Key{Algorithm: HmacSha256, Material: []byte("secret")},
 			opts: []SignerOption{
 				WithTTL(0),
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithParameter("static", Token("hello")),
 			},
 			signOpts: []SignOption{
@@ -611,7 +467,6 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithAlg(),
 				WithTTL(0),
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 			},
 			msg: &Message{Header: http.Header{}, IsRequest: true},
 			assert: func(t *testing.T, err error, header http.Header) {
@@ -626,11 +481,11 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.1. minimal signature using rsa-pss-sha512",
 			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "b3k2pp5k7z-50gnwp.yemd", nil })),
 				WithLabel("sig-b21"),
 				WithTTL(0),
 				WithKeyID("test-key-rsa-pss"),
 			},
+			signOpts: []SignOption{WithParameter("nonce", "b3k2pp5k7z-50gnwp.yemd")},
 			msg: &Message{
 				Method:    http.MethodPost,
 				Authority: "example.com",
@@ -662,7 +517,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.2. selective covered components using rsa-pss-sha512",
 			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b22"),
 				WithTTL(0),
 				WithComponents("@authority", "content-digest", "@query-param;name=\"Pet\""),
@@ -704,7 +558,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.3. full coverage using rsa-pss-sha512",
 			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b23"),
 				WithTTL(0),
 				WithComponents(
@@ -747,7 +600,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.4. signing a response using ecdsa-p256-sha256",
 			key: Key{Algorithm: EcdsaP256Sha256, Material: tkECCP256},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b24"),
 				WithTTL(0),
 				WithComponents("@status", "content-type", "content-digest", "content-length"),
@@ -786,7 +638,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.5. signing a request using hmac-sha256",
 			key: Key{Algorithm: HmacSha256, Material: tkMAC},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b25"),
 				WithTTL(0),
 				WithComponents("date", "@authority", "content-type"),
@@ -822,7 +673,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "B.2.6. signing a request using ed25519",
 			key: Key{Algorithm: Ed25519, Material: tkEd25519},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-b26"),
 				WithTTL(0),
 				WithComponents("date", "@method", "@path", "@authority", "content-type", "content-length"),
@@ -857,7 +707,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "overwrites stale content-digest when signing content-digest component",
 			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-content-digest"),
 				WithTTL(0),
 				WithComponents("content-digest"),
@@ -902,7 +751,6 @@ func TestSignerSign(t *testing.T) {
 			uc:  "preserves existing content-digest when content-digest component is not signed",
 			key: Key{Algorithm: RsaPssSha512, Material: tkRSAPSS},
 			opts: []SignerOption{
-				WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 				WithLabel("sig-no-content-digest"),
 				WithTTL(0),
 				WithComponents("date", "@method"),
@@ -954,7 +802,6 @@ func TestSignerSign(t *testing.T) {
 		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
 			WithTTL(0),
 			WithLabel("static"),
-			WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 		)
 		require.NoError(t, err)
 
@@ -968,32 +815,22 @@ func TestSignerSign(t *testing.T) {
 	})
 
 	t.Run("per-call nonce does not persist", func(t *testing.T) {
-		getterCalls := 0
-		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
-			WithTTL(0),
-			WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) {
-				getterCalls++
-				return "generated-nonce", nil
-			})),
-		)
+		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")}, WithTTL(0))
 		require.NoError(t, err)
 
 		first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true},
 			WithParameter("nonce", "requested-nonce"))
 		require.NoError(t, err)
 		assert.Equal(t, `sig=();created=1618884473;nonce="requested-nonce"`, first.Get("Signature-Input"))
-		assert.Zero(t, getterCalls)
 
 		second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
 		require.NoError(t, err)
-		assert.Equal(t, `sig=();created=1618884473;nonce="generated-nonce"`, second.Get("Signature-Input"))
-		assert.Equal(t, 1, getterCalls)
+		assert.Equal(t, `sig=();created=1618884473`, second.Get("Signature-Input"))
 	})
 
 	t.Run("per-call parameters do not persist", func(t *testing.T) {
 		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
 			WithTTL(0),
-			WithNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 		)
 		require.NoError(t, err)
 

@@ -59,7 +59,7 @@ func newSignatureBase(si *signatureInput, msg *Message) (signatureBase, error) {
 	return sigBase, nil
 }
 
-func (s signatureBase) marshal() ([]byte, error) {
+func (s signatureBase) marshal() []byte {
 	var buf bytes.Buffer
 
 	for i, item := range s.entries {
@@ -81,10 +81,10 @@ func (s signatureBase) marshal() ([]byte, error) {
 		buf.WriteString(s.signatureParams)
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
 
-func (s signatureBase) components() (map[string]string, error) {
+func (s signatureBase) components() map[string]string {
 	result := make(map[string]string, len(s.entries))
 
 	for i, item := range s.entries {
@@ -98,5 +98,5 @@ func (s signatureBase) components() (map[string]string, error) {
 		result[key] = item.value
 	}
 
-	return result, nil
+	return result
 }

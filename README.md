@@ -15,7 +15,8 @@ To sign an HTTP request, first, create a `Signer` instance using your preferred 
 // Create a signer.
 signer, err := httpsig.NewSigner( 
     // specify a key
-    httpsig.Key{Material: privKey, Algorithm: httpsig.EcdsaP256Sha256},
+    httpsig.Key{Material: privKey, Algorithm: httpsig.EcdsaP256Sha256}, 
+    // the keyid parameter for the above key
     httpsig.WithKeyID("key1"),
     // specify the required options 
     // duration for which the signature should be valid
@@ -32,7 +33,11 @@ req, err := http.NewRequestWithContext(context.Background(), "GET", "https://som
 // error handling goes here
 
 // Sign the request
-header, err := signer.Sign(httpsig.MessageFromRequest(req))
+header, err := signer.Sign(
+    httpsig.MessageFromRequest(req), 
+    // add a nonce if required
+    httpsig.WithParameter("nonce", someNonce)
+)
 // error handling goes here
 
 // Add the signature to the request
@@ -51,8 +56,6 @@ verifier, err := httpsig.NewVerifier(
     // specify a key resolver to resolve the key used by the client
     keyResolver,
     // specify the required options
-    // to detect and mitigate replay attacks
-    httpsig.WithNonceChecker(nonceChecker),
     // which response components are expected to be protected
     httpsig.WithComponents("@status", "content-type"),
     // validity time skew
@@ -73,6 +76,8 @@ verified, err := verifier.Verify(httpsig.MessageFromResponse(resp))
 
 ```
 
+Once `Verify` succeeds, the application can inspect the `verified` object and perform its own policies, like e.g., the nonce correlation and replay checks.
+
 If you need to validate a signature created by a specific application (identified by a tag), use the `WithRequiredTag` option when creating the verifier. This option allows you to specify a tag along with the same options as the `NewVerifier` function. Here’s an example:
 
 ```go
@@ -80,8 +85,6 @@ verifier, err := httpsig.NewVerifier(
     // specify a key resolver to resolve the key used by the client
     keyResolver,
     // specify the required options
-    // to detect and mitigate replay attacks
-    httpsig.WithNonceChecker(nonceChecker), 
     httpsig.WithRequiredTag(
         // tag of the signature
         "myapp",
@@ -141,9 +144,8 @@ On the client side, you can request the server to sign the response by using the
 builder, err := httpsig.NewAcceptSignature(
     // request a key ID and signing algorithm
     httpsig.WithKeyID("foo"),
+    // specify which signature algorithm the peer should use
     httpsig.WithSignatureAlgorithm(httpsig.EcdsaP256Sha256),
-    // specify the NonceSource for the nonce to be added 
-    httpsig.WithExpectedNonce(nonceSource),
     // specify which label should the server use when creating the response 
     httpsig.WithLabel("bar"),
     // specify which components should be covered by the signature 
@@ -160,8 +162,9 @@ builder, err := httpsig.NewAcceptSignature(
 // error handling goes here
 
 req := ... // create your request
+nonce := ... // application-generated nonce for this request
 
-err = builder.Build(req.Context(), req.Header)
+err = builder.Build(req.Context(), req.Header, httpsig.WithParameter("nonce", nonce))
 // error handling goes here
 ```
 
@@ -176,8 +179,6 @@ verifier, err := httpsig.NewVerifier(
     // specify a key resolver
     keyResolver,
     // specify the required options
-    // to detect and mitigate replay attacks
-    httpsig.WithNonceChecker(nonceChecker),
     httpsig.WithRequiredTag(
         // tag of the signature
         "myapp",
@@ -192,10 +193,11 @@ verifier, err := httpsig.NewVerifier(
         httpsig.WithSignatureNegotiation(
             // request a key ID and signature algorithm
             httpsig.WithKeyID("key1"),
+            // request a signature algorithm the peer should use
             httpsig.WithSignatureAlgorithm(httpsig.EcdsaP256Sha256),
-            // specify the source for the nonce, the client should use
-            httpsig.WithRequestedNonce(nonceGetter),
-            // specify the label for the signature, the client should use
+            // specify the source for the nonce
+            httpsig.WithNonceGetter(nonceGetter),
+            // specify the label for the signature
             httpsig.WithLabel("bar"),
         ),
     ),
@@ -212,6 +214,8 @@ if errors.As(err, &missingSigErr) {
 }
 // further error handling
 ```
+
+For automatic negotiation, the configured `NonceGetter` runs while `Verify` prepares the `Accept-Signature` headers, before `NoApplicableSignatureError` is returned.
 
 > [!NOTE]  
 > The `WithSignatureNegotiation` option at the top level (outside the `WithRequiredTag` option) is mutually exclusive with the `WithValidateAllSignatures` option. However, you can still use `WithSignatureNegotiation` at the top level if you want to apply the same configuration for all expected tagged signatures, thereby simplifying your code.

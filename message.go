@@ -144,7 +144,7 @@ func MessageForResponse(req *http.Request, respHeader http.Header, body []byte, 
 // fields supply data used by component identifiers with the ;req parameter.
 // Not every field is necessarily covered by the signature.
 type Message struct {
-	// Context is used for key resolution, nonce generation, and nonce checks.
+	// Context is passed to key resolution and Accept-Signature nonce generation.
 	Context context.Context //nolint: containedctx
 
 	// Method is the associated HTTP request method.

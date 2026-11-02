@@ -16,11 +16,16 @@ type signOptions struct {
 	parameters       []parameterOption
 }
 
+type acceptSignatureBuildOptions struct {
+	nonce    string
+	nonceSet bool
+}
+
 type sigNegotiationOptions struct {
 	opts []AcceptSignatureOption
 }
 
-// SignerOption configures how a Signer constructs HTTP message signatures.
+// SignerOption configures the signing policy of a Signer.
 type SignerOption interface {
 	applySignerOption(s *signer) error
 }
@@ -30,23 +35,26 @@ type SignOption interface {
 	applySignOption(opts *signOptions) error
 }
 
-// SignatureNegotiationOption configures the additional values requested by
-// WithSignatureNegotiation beyond the verifier's existing requirements.
+// SignatureNegotiationOption configures requests additional to the verifier's
+// signature requirements.
 type SignatureNegotiationOption interface {
 	applySignatureNegotiationOption(opts *sigNegotiationOptions)
 }
 
-// VerifierOption configures which signatures to verify and which generic
-// checks to apply. Options can be provided to NewVerifier or used within
-// WithRequiredTag for per-tag expectations.
+// VerifierOption configures signature selection or verification requirements.
+// It can also be used within WithRequiredTag for per-tag requirements.
 type VerifierOption interface {
 	applyVerifierOption(v *verifier, e *expectations, inTag bool) error
 }
 
-// AcceptSignatureOption configures the Accept-Signature request produced by
-// NewAcceptSignature and AcceptSignatureBuilder.Build.
+// AcceptSignatureOption configures an AcceptSignatureBuilder.
 type AcceptSignatureOption interface {
 	applyAcceptSignatureOption(builder *AcceptSignatureBuilder) error
+}
+
+// AcceptSignatureBuildOption configures a single AcceptSignatureBuilder.Build call.
+type AcceptSignatureBuildOption interface {
+	applyAcceptSignatureBuildOption(opts *acceptSignatureBuildOptions) error
 }
 
 type signerOptionFunc func(*signer) error
@@ -55,27 +63,14 @@ func (f signerOptionFunc) applySignerOption(s *signer) error {
 	return f(s)
 }
 
-type signatureNegotiationOptionFunc func(*sigNegotiationOptions)
-
-func (f signatureNegotiationOptionFunc) applySignatureNegotiationOption(opts *sigNegotiationOptions) {
-	f(opts)
-}
-
 type verifierOptionFunc func(*verifier, *expectations, bool) error
 
 func (f verifierOptionFunc) applyVerifierOption(v *verifier, e *expectations, inTag bool) error {
 	return f(v, e, inTag)
 }
 
-type acceptSignatureOptionFunc func(*AcceptSignatureBuilder) error
-
-func (f acceptSignatureOptionFunc) applyAcceptSignatureOption(asb *AcceptSignatureBuilder) error {
-	return f(asb)
-}
-
-// WithLabel configures the technical signature label.
-// NOTE: Labels are not signed and may be renamed if they collide with existing
-// signature labels in a message.
+// WithLabel specifies the technical label for a signature or an
+// Accept-Signature request. An empty label leaves the current label unchanged.
 func WithLabel(label string) labelOption {
 	return labelOption(label)
 }
@@ -110,9 +105,8 @@ func (o labelOption) applySignatureNegotiationOption(opts *sigNegotiationOptions
 	opts.opts = append(opts.opts, o)
 }
 
-// WithTTL sets how long the generated signature remains valid by controlling
-// its expires parameter. A non-positive duration omits expires from the
-// generated Signature-Input.
+// WithTTL specifies the interval between the created and expires signature
+// parameters. A non-positive duration omits expires.
 func WithTTL(ttl time.Duration) SignerOption {
 	return signerOptionFunc(func(s *signer) error {
 		s.ttl = ttl
@@ -121,11 +115,8 @@ func WithTTL(ttl time.Duration) SignerOption {
 	})
 }
 
-// WithComponents configures HTTP fields and derived component identifiers.
-// NewSigner signs these components, NewVerifier requires them to be covered,
-// and NewAcceptSignature requests their coverage from the peer.
-// If the signer covers its own "content-digest" field, it also generates or
-// updates that field from the message body.
+// WithComponents specifies component identifiers to cover when signing,
+// require during verification, or request in Accept-Signature.
 func WithComponents(identifiers ...string) componentsOption {
 	return componentsOption{identifiers: identifiers}
 }
@@ -161,7 +152,8 @@ func (o componentsOption) applyAcceptSignatureOption(asb *AcceptSignatureBuilder
 	return nil
 }
 
-// WithTag configures the application-defined tag signature parameter.
+// WithTag specifies an application-defined tag for signing or
+// Accept-Signature requests.
 func WithTag(tag string) tagOption {
 	return tagOption(tag)
 }
@@ -182,22 +174,8 @@ func (o tagOption) applyAcceptSignatureOption(asb *AcceptSignatureBuilder) error
 	return nil
 }
 
-// WithNonce configures the source for the nonce signature parameter.
-// A nil getter leaves the configured source unchanged. If the getter returns
-// an empty string, the nonce parameter is omitted.
-func WithNonce(ng NonceGetter) SignerOption {
-	return signerOptionFunc(func(s *signer) error {
-		if ng != nil {
-			s.ng = ng
-		}
-
-		return nil
-	})
-}
-
-// WithContentDigestAlgorithm selects the algorithm used to generate
-// Content-Digest when that component is covered. Unsupported algorithms
-// cause an error.
+// WithContentDigestAlgorithm selects the algorithm for generating a covered
+// Content-Digest. An unsupported algorithm causes ErrUnsupportedAlgorithm.
 func WithContentDigestAlgorithm(alg DigestAlgorithm) SignerOption {
 	return signerOptionFunc(func(s *signer) error {
 		if _, known := supportedAlgs[alg]; !known {
@@ -210,8 +188,8 @@ func WithContentDigestAlgorithm(alg DigestAlgorithm) SignerOption {
 	})
 }
 
-// WithKeyID configures the keyid signature parameter. An empty value is
-// ignored by the Signer and omitted from an Accept-Signature request.
+// WithKeyID specifies the keyid parameter for signing or Accept-Signature.
+// An empty value is ignored when signing and omitted from Accept-Signature.
 func WithKeyID(keyID string) keyIDOption {
 	return keyIDOption(keyID)
 }
@@ -236,7 +214,8 @@ func (o keyIDOption) applySignatureNegotiationOption(opts *sigNegotiationOptions
 	opts.opts = append(opts.opts, o)
 }
 
-// WithAlg includes the alg signature parameter of the given Key.
+// WithAlg includes the selected Key.Algorithm as the alg signature parameter.
+// It does not select or change the signing algorithm.
 func WithAlg() SignerOption {
 	return signerOptionFunc(func(s *signer) error {
 		s.includeAlg = true
@@ -245,11 +224,12 @@ func WithAlg() SignerOption {
 	})
 }
 
-// WithParameter adds a static or per-call signature parameter to Signature-Input.
+// WithParameter specifies a signature parameter for NewSigner or an individual
+// Sign call. It also allows AcceptSignatureBuilder.Build to request a nonce.
 // Extension values may be string, Token, bool, int, int64, float64, or []byte.
-// Standard RFC 9421 parameter names are reserved, except that Sign permits
-// "nonce" as a non-empty string, overriding the configured nonce source for
-// that call. Duplicate parameter names are rejected.
+// Standard RFC 9421 parameter names are reserved, except for a non-empty
+// string nonce on Sign or Build. Build accepts no other parameter names.
+// Duplicate names are rejected.
 func WithParameter(name string, value any) parameterOption {
 	return parameterOption{name: name, value: value}
 }
@@ -268,13 +248,12 @@ func (o parameterOption) applySignOption(opts *signOptions) error {
 		if opts.nonceSet {
 			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
 		}
-		nonce, ok := o.value.(string)
-		if !ok || nonce == "" {
-			return fmt.Errorf("%w: nonce must be a non-empty string", ErrParameter)
-		}
-		if err := validateParameter(o.name, nonce); err != nil {
+
+		nonce, err := validateNonceOption(o.value)
+		if err != nil {
 			return err
 		}
+
 		opts.nonce = nonce
 		opts.nonceSet = true
 
@@ -284,8 +263,41 @@ func (o parameterOption) applySignOption(opts *signOptions) error {
 	return addParameter(&opts.parameters, opts.staticParameters, o, false)
 }
 
-// WithValidityTolerance allows a clock skew of d when checking the created
-// and expires signature parameters.
+func (o parameterOption) applyAcceptSignatureBuildOption(opts *acceptSignatureBuildOptions) error {
+	if o.name != string(Nonce) {
+		return fmt.Errorf("%w: unsupported Accept-Signature parameter %q", ErrParameter, o.name)
+	}
+
+	if opts.nonceSet {
+		return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
+	}
+
+	nonce, err := validateNonceOption(o.value)
+	if err != nil {
+		return err
+	}
+
+	opts.nonce = nonce
+	opts.nonceSet = true
+
+	return nil
+}
+
+func validateNonceOption(value any) (string, error) {
+	nonce, ok := value.(string)
+	if !ok || nonce == "" {
+		return "", fmt.Errorf("%w: nonce must be a non-empty string", ErrParameter)
+	}
+
+	if err := validateParameter(string(Nonce), nonce); err != nil {
+		return "", err
+	}
+
+	return nonce, nil
+}
+
+// WithValidityTolerance specifies the allowed clock skew for created and
+// expires timestamp checks.
 func WithValidityTolerance(d time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *expectations, _ bool) error {
 		e.tolerance = d
@@ -294,7 +306,8 @@ func WithValidityTolerance(d time.Duration) VerifierOption {
 	})
 }
 
-// WithMaxAge sets the maximum age of signatures with a created timestamp.
+// WithMaxAge specifies the maximum allowed age of a signature with a
+// created timestamp.
 func WithMaxAge(d time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *expectations, _ bool) error {
 		e.maxAge = d
@@ -303,9 +316,8 @@ func WithMaxAge(d time.Duration) VerifierOption {
 	})
 }
 
-// WithRequiredTag selects signatures with the given application tag and
-// applies opts to that signature. Each tag may be configured only once.
-// An empty tag is not allowed.
+// WithRequiredTag specifies a required application-defined tag and its
+// per-tag verifier options. Each non-empty tag may be configured only once.
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	return verifierOptionFunc(func(ver *verifier, _ *expectations, f bool) error {
 		if f {
@@ -337,9 +349,8 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 	})
 }
 
-// WithValidateAllSignatures verifies every signature in the message. When a
-// signature has a configured tag, its per-tag requirements apply; otherwise,
-// global requirements apply.
+// WithValidateAllSignatures selects all signatures for verification, rather
+// than only those with required tags.
 func WithValidateAllSignatures() VerifierOption {
 	return verifierOptionFunc(func(v *verifier, _ *expectations, _ bool) error {
 		v.validateAllSigs = true
@@ -348,9 +359,9 @@ func WithValidateAllSignatures() VerifierOption {
 	})
 }
 
-// WithCreatedTimestamp specifies whether created must be present during
-// verification or requested in Accept-Signature. If false, a present created
-// timestamp is still validated during verification.
+// WithCreatedTimestamp specifies whether the created parameter is required
+// during verification or requested in Accept-Signature. False makes it
+// optional during verification and omits it from Accept-Signature.
 func WithCreatedTimestamp(flag bool) createdTimestampOption {
 	return createdTimestampOption(flag)
 }
@@ -370,9 +381,9 @@ func (o createdTimestampOption) applyAcceptSignatureOption(asb *AcceptSignatureB
 	return nil
 }
 
-// WithExpiredTimestamp specifies whether expires must be present during
-// verification or requested in Accept-Signature. If false, a present expires
-// timestamp is still validated during verification.
+// WithExpiredTimestamp specifies whether the expires parameter is required
+// during verification or requested in Accept-Signature. False makes it
+// optional during verification and omits it from Accept-Signature.
 func WithExpiredTimestamp(flag bool) expiredTimestampOption {
 	return expiredTimestampOption(flag)
 }
@@ -392,11 +403,9 @@ func (o expiredTimestampOption) applyAcceptSignatureOption(asb *AcceptSignatureB
 	return nil
 }
 
-// WithSignatureNegotiation enables Accept-Signature negotiation when a
-// required signature or required component or parameter is missing.
-//
-// Negotiation reuses the relevant verifier requirements; opts specify only
-// additional requests such as a key ID, nonce, algorithm, or label.
+// WithSignatureNegotiation enables Accept-Signature negotiation based on the
+// verifier's requirements. Its options specify additional requests that cannot
+// be derived from those requirements.
 func WithSignatureNegotiation(opts ...SignatureNegotiationOption) VerifierOption {
 	no := &sigNegotiationOptions{opts: make([]AcceptSignatureOption, 0, len(opts))}
 	for _, opt := range opts {
@@ -415,15 +424,8 @@ func WithSignatureNegotiation(opts ...SignatureNegotiationOption) VerifierOption
 	})
 }
 
-// WithRequestedNonce supplies the nonce source for Accept-Signature
-// negotiation.
-func WithRequestedNonce(ng NonceGetter) SignatureNegotiationOption {
-	return signatureNegotiationOptionFunc(func(sno *sigNegotiationOptions) {
-		sno.opts = append(sno.opts, WithExpectedNonce(ng))
-	})
-}
-
-// WithSignatureAlgorithm requests an alg value from the peer.
+// WithSignatureAlgorithm specifies an alg parameter to request in
+// Accept-Signature. It does not select a signing algorithm.
 func WithSignatureAlgorithm(alg SignatureAlgorithm) signatureAlgorithmOption {
 	return signatureAlgorithmOption(alg)
 }
@@ -440,22 +442,30 @@ func (o signatureAlgorithmOption) applySignatureNegotiationOption(opts *sigNegot
 	opts.opts = append(opts.opts, o)
 }
 
-// WithExpectedNonce configures the nonce source for Accept-Signature.
-// A nil getter leaves the configured source unchanged.
-func WithExpectedNonce(ng NonceGetter) AcceptSignatureOption {
-	// TODO: What can we do for profiles which make use of nonces but in a different parameter
-	return acceptSignatureOptionFunc(func(asb *AcceptSignatureBuilder) error {
-		if ng != nil {
-			asb.nonceGetter = ng
-		}
-
-		return nil
-	})
+// WithNonceGetter configures a nonce source for Accept-Signature, including
+// verifier-based negotiation. A nil getter leaves the source unchanged.
+func WithNonceGetter(ng NonceGetter) nonceGetterOption {
+	return nonceGetterOption{getter: ng}
 }
 
-// WithContentDigestAlgorithmPreferences sets the Want-Content-Digest
-// preferences for NewAcceptSignature or WithSignatureNegotiation when the
-// requested components contain content-digest.
+type nonceGetterOption struct {
+	getter NonceGetter
+}
+
+func (o nonceGetterOption) applyAcceptSignatureOption(asb *AcceptSignatureBuilder) error {
+	if o.getter != nil {
+		asb.nonceGetter = o.getter
+	}
+
+	return nil
+}
+
+func (o nonceGetterOption) applySignatureNegotiationOption(opts *sigNegotiationOptions) {
+	opts.opts = append(opts.opts, o)
+}
+
+// WithContentDigestAlgorithmPreferences specifies the algorithms and
+// preferences to request in Want-Content-Digest.
 func WithContentDigestAlgorithmPreferences(prefs ...AlgorithmPreference) contentDigestAlgorithmPreferencesOption {
 	return prefs
 }
@@ -517,6 +527,7 @@ func addParameter(
 			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, option.name)
 		}
 	}
+
 	for _, param := range *parameters {
 		if param.name == option.name {
 			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, option.name)
@@ -539,7 +550,7 @@ func validateParameter(name string, value any) error {
 	validationParams.Add(name, value)
 
 	if _, err := httpsfv.Marshal(httpsfv.Item{Value: true, Params: validationParams}); err != nil {
-		return fmt.Errorf("%w: invalid signature parameter %q: %v", ErrParameter, name, err)
+		return fmt.Errorf("%w: invalid signature parameter %q: %w", ErrParameter, name, err)
 	}
 
 	return nil
