@@ -63,7 +63,6 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	ver := &verifier{
 		keyResolver:     resolver,
 		tagExpectations: make(map[string]*expectations),
-		nonceChecker:    noopNonceChecker{},
 	}
 
 	global := &expectations{
@@ -167,25 +166,12 @@ func (e *expectations) assert(
 	si *signatureInput,
 	msg *Message,
 	keyAlg SignatureAlgorithm,
-	nc NonceChecker,
 ) error {
 	var (
 		missingComponents []string
 		cmv               compositeMessageVerifier
 		mv                messageVerifier
 	)
-
-	nonce := NonceValue{}
-
-	nonceValue, noncePresent := si.nonce()
-	if noncePresent {
-		nonce.Value = nonceValue
-		nonce.Present = true
-	}
-
-	if err := nc.CheckNonce(msg.Context, nonce); err != nil {
-		return fmt.Errorf("%w: nonce validation failed: %w", ErrParameter, err)
-	}
 
 	algorithm, algPresent := si.algorithm()
 	if algPresent && algorithm != keyAlg {
@@ -252,7 +238,6 @@ type verifier struct {
 	keyResolver     KeyResolver
 	tagExpectations map[string]*expectations
 	validateAllSigs bool
-	nonceChecker    NonceChecker
 }
 
 func (v *verifier) Verify(msg *Message) (VerificationResult, error) {
@@ -403,7 +388,7 @@ func (v *verifier) verifySignature(
 		return VerifiedSignature{}, err
 	}
 
-	if err = exp.assert(si, msg, keyInfo.Key.Algorithm, v.nonceChecker); err != nil {
+	if err = exp.assert(si, msg, keyInfo.Key.Algorithm); err != nil {
 		return VerifiedSignature{}, err
 	}
 

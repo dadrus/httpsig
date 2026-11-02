@@ -75,44 +75,14 @@ func TestExpectationsAssertParameters(t *testing.T) {
 	now := time.Now().UTC()
 	falseVal := false
 	trueVal := true
-	noNonce := NonceValue{Present: false, Value: ""}
 
 	for _, tc := range []struct {
 		uc        string
 		params    httpsfv.InnerList
 		exp       expectations
 		expAlg    SignatureAlgorithm
-		configure func(t *testing.T, nc *NonceCheckerMock)
 		assert    func(t *testing.T, err error)
 	}{
-		{
-			uc: "replay attack",
-			params: httpsfv.InnerList{
-				Params: func() *httpsfv.Params {
-					params := httpsfv.NewParams()
-					params.Add(string(Nonce), "test")
-
-					return params
-				}(),
-			},
-			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nonce := NonceValue{
-					Present: true,
-					Value:   "test",
-				}
-				nc.EXPECT().CheckNonce(mock.Anything, nonce).Return(errors.New("test error"))
-			},
-			assert: func(t *testing.T, err error) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrParameter)
-				require.ErrorContains(t, err, "nonce validation failed")
-			},
-		},
 		{
 			uc: "signature algorithm mismatch",
 			params: httpsfv.InnerList{
@@ -124,11 +94,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			expAlg: EcdsaP256Sha256,
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -148,11 +113,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{reqExpiresTS: &falseVal, reqCreatedTS: &falseVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -176,11 +136,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -202,11 +157,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -224,11 +174,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -252,11 +197,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -278,11 +218,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -300,11 +235,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}(),
 			},
 			exp: expectations{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -322,11 +252,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 
 				return expectations{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
 			}(),
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -339,11 +264,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			uc:     "expected created parameter is missing",
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
 			exp:    expectations{reqCreatedTS: &trueVal, reqExpiresTS: &falseVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -356,11 +276,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			uc:     "expected expires parameter is missing",
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
 			exp:    expectations{reqCreatedTS: &falseVal, reqExpiresTS: &trueVal},
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nc.EXPECT().CheckNonce(mock.Anything, noNonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -398,12 +313,6 @@ func TestExpectationsAssertParameters(t *testing.T) {
 				}
 			}(),
 			expAlg: EcdsaP256Sha256,
-			configure: func(t *testing.T, nc *NonceCheckerMock) {
-				t.Helper()
-
-				nonce := NonceValue{Present: true, Value: "foo"}
-				nc.EXPECT().CheckNonce(mock.Anything, nonce).Return(nil)
-			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -417,10 +326,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 			si, err := parseSignatureInput(tc.params)
 			require.NoError(t, err)
 
-			nc := NewNonceCheckerMock(t)
-			tc.configure(t, nc)
-
-			err = tc.exp.assert(si, msg, tc.expAlg, nc)
+			err = tc.exp.assert(si, msg, tc.expAlg)
 
 			tc.assert(t, err)
 		})
@@ -616,19 +522,6 @@ func TestWithMaxAge(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 15*time.Minute, exp.maxAge)
-}
-
-func TestWithNonceChecker(t *testing.T) {
-	t.Parallel()
-
-	v := &verifier{}
-	exp := &expectations{}
-	storage := &NonceCheckerMock{}
-
-	err := WithNonceChecker(storage).applyVerifierOption(v, exp, false)
-	require.NoError(t, err)
-
-	assert.Equal(t, storage, v.nonceChecker)
 }
 
 func TestWithSignatureNegotiation(t *testing.T) {

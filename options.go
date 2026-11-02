@@ -303,19 +303,6 @@ func WithMaxAge(d time.Duration) VerifierOption {
 	})
 }
 
-// WithNonceChecker sets the checker for the nonce parameter, including when
-// the parameter is absent.
-func WithNonceChecker(checker NonceChecker) VerifierOption {
-	// TODO: Maybe we should use checker after cryptographic verification has succeeded
-	return verifierOptionFunc(func(v *verifier, _ *expectations, _ bool) error {
-		if checker != nil {
-			v.nonceChecker = checker
-		}
-
-		return nil
-	})
-}
-
 // WithRequiredTag selects signatures with the given application tag and
 // applies opts to that signature. Each tag may be configured only once.
 // An empty tag is not allowed.

@@ -9,5 +9,4 @@ packages:
   github.com/dadrus/httpsig:
     interfaces:
       NonceGetter: {}
-      NonceChecker: {}
       KeyResolver: {}
