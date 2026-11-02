@@ -54,7 +54,7 @@ verifier, err := httpsig.NewVerifier(
     // to detect and mitigate replay attacks
     httpsig.WithNonceChecker(nonceChecker),
     // which response components are expected to be protected
-    httpsig.WithRequiredComponents("@status", "content-type"),
+    httpsig.WithComponents("@status", "content-type"),
     // validity time skew
     httpsig.WithValidityTolerance(5 * time.Second),
     // how old a signature is allowed to be
@@ -86,7 +86,7 @@ verifier, err := httpsig.NewVerifier(
         // tag of the signature
         "myapp",
         // which components are expected to be protected by a signature
-        httpsig.WithRequiredComponents("@authority", "@method", "x-my-fancy-header"),
+        httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
         // validity time skew
         httpsig.WithValidityTolerance(5 * time.Second),
         // how old a signature is allowed to be
@@ -140,22 +140,22 @@ On the client side, you can request the server to sign the response by using the
 // create a builder (all options are optional)
 builder, err := httpsig.NewAcceptSignature(
     // request a key ID and signing algorithm
-    httpsig.WithExpectedKeyID("foo"),
-    httpsig.WithExpectedSignatureAlgorithm(httpsig.EcdsaP256Sha256),
+    httpsig.WithKeyID("foo"),
+    httpsig.WithSignatureAlgorithm(httpsig.EcdsaP256Sha256),
     // specify the NonceSource for the nonce to be added 
     httpsig.WithExpectedNonce(nonceSource),
     // specify which label should the server use when creating the response 
-    httpsig.WithExpectedLabel("bar"),
+    httpsig.WithLabel("bar"),
     // specify which components should be covered by the signature 
-    httpsig.WithExpectedComponents("@status", "content-digest;req", "content-digest"),
+    httpsig.WithComponents("@status", "content-digest;req", "content-digest"),
     // specify your content digest algorithm references 
     httpsig.WithContentDigestAlgorithmPreferences(httpsig.AlgorithmPreference{Algorithm: httpsig.Sha256, Preference: 2}),
     // specify which tag the server should use 
-    httpsig.WithExpectedTag("awesome-app"),
+    httpsig.WithTag("awesome-app"),
     // specify whether you want the created time stamp to be included 
-    httpsig.WithExpectedCreatedTimestamp(true),
+    httpsig.WithCreatedTimestamp(true),
     // specify whether you want the expires time stamp to be included 
-    httpsig.WithExpectedExpiresTimestamp(true),
+    httpsig.WithExpiredTimestamp(true),
 )
 // error handling goes here
 
@@ -182,7 +182,7 @@ verifier, err := httpsig.NewVerifier(
         // tag of the signature
         "myapp",
         // which components are expected to be protected by a signature
-        httpsig.WithRequiredComponents("@authority", "@method", "x-my-fancy-header"),
+        httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
         // validity time skew
         httpsig.WithValidityTolerance(5 * time.Second),
         // how old a signature is allowed to be
@@ -191,12 +191,12 @@ verifier, err := httpsig.NewVerifier(
         // are not present, request a signature from the client
         httpsig.WithSignatureNegotiation(
             // request a key ID and signature algorithm
-            httpsig.WithRequestedKeyID("key1"),
-            httpsig.WithRequestedSignatureAlgorithm(httpsig.EcdsaP256Sha256),
+            httpsig.WithKeyID("key1"),
+            httpsig.WithSignatureAlgorithm(httpsig.EcdsaP256Sha256),
             // specify the source for the nonce, the client should use
             httpsig.WithRequestedNonce(nonceGetter),
             // specify the label for the signature, the client should use
-            httpsig.WithRequestedLabel("bar"),
+            httpsig.WithLabel("bar"),
         ),
     ),
 )

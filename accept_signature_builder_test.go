@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWithExpectedSignatureAlgorithm(t *testing.T) {
+func TestWithSignatureAlgorithmForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for uc, alg := range map[string]SignatureAlgorithm{
@@ -20,7 +20,7 @@ func TestWithExpectedSignatureAlgorithm(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{}
 
-			err := WithExpectedSignatureAlgorithm(alg)(asb)
+			err := WithSignatureAlgorithm(alg).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, alg, asb.signatureAlgorithm)
@@ -28,7 +28,7 @@ func TestWithExpectedSignatureAlgorithm(t *testing.T) {
 	}
 }
 
-func TestWithExpectedKeyID(t *testing.T) {
+func TestWithKeyIDForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for uc, keyID := range map[string]string{
@@ -38,7 +38,7 @@ func TestWithExpectedKeyID(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{}
 
-			err := WithExpectedKeyID(keyID)(asb)
+			err := WithKeyID(keyID).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, keyID, asb.keyID)
@@ -60,7 +60,7 @@ func TestWithExpectedNonce(t *testing.T) {
 		t.Run(tc.uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{nonceGetter: nonceGetter{}}
 
-			err := WithExpectedNonce(tc.ng)(asb)
+			err := WithExpectedNonce(tc.ng).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.exp, asb.nonceGetter)
@@ -68,7 +68,7 @@ func TestWithExpectedNonce(t *testing.T) {
 	}
 }
 
-func TestWithExpectedLabel(t *testing.T) {
+func TestWithLabelForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -82,7 +82,7 @@ func TestWithExpectedLabel(t *testing.T) {
 		t.Run(tc.uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{label: "foo"}
 
-			err := WithExpectedLabel(tc.label)(asb)
+			err := WithLabel(tc.label).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.exp, asb.label)
@@ -90,7 +90,7 @@ func TestWithExpectedLabel(t *testing.T) {
 	}
 }
 
-func TestWithExpectedComponents(t *testing.T) {
+func TestWithComponentsForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -149,7 +149,7 @@ func TestWithExpectedComponents(t *testing.T) {
 		t.Run(tc.uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{label: "foo"}
 
-			err := WithExpectedComponents(tc.identifiers...)(asb)
+			err := WithComponents(tc.identifiers...).applyAcceptSignatureOption(asb)
 
 			tc.assert(t, err, asb)
 		})
@@ -191,7 +191,7 @@ func TestWithContentDigestAlgorithmPreferences(t *testing.T) {
 				cdAlgPrefs: []string{defaultPreference},
 			}
 
-			err := WithContentDigestAlgorithmPreferences(tc.prefs...)(asb)
+			err := WithContentDigestAlgorithmPreferences(tc.prefs...).applyAcceptSignatureOption(asb)
 
 			if tc.expErr != nil {
 				require.Error(t, err)
@@ -204,7 +204,7 @@ func TestWithContentDigestAlgorithmPreferences(t *testing.T) {
 	}
 }
 
-func TestWithExpectedTag(t *testing.T) {
+func TestWithTagForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -217,7 +217,7 @@ func TestWithExpectedTag(t *testing.T) {
 		t.Run(tc.uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{}
 
-			err := WithExpectedTag(tc.tag)(asb)
+			err := WithTag(tc.tag).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.tag, asb.tag)
@@ -225,23 +225,23 @@ func TestWithExpectedTag(t *testing.T) {
 	}
 }
 
-func TestWithExpectedCreatedTimestamp(t *testing.T) {
+func TestWithCreatedTimestampForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	asb := &AcceptSignatureBuilder{addCreatedTS: true}
 
-	err := WithExpectedCreatedTimestamp(false)(asb)
+	err := WithCreatedTimestamp(false).applyAcceptSignatureOption(asb)
 
 	require.NoError(t, err)
 	assert.False(t, asb.addCreatedTS)
 }
 
-func TestWithExpectedExpiresTimestamp(t *testing.T) {
+func TestWithExpiredTimestampForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	asb := &AcceptSignatureBuilder{addExpiresTS: true}
 
-	err := WithExpectedExpiresTimestamp(false)(asb)
+	err := WithExpiredTimestamp(false).applyAcceptSignatureOption(asb)
 
 	require.NoError(t, err)
 	assert.False(t, asb.addExpiresTS)
@@ -279,15 +279,15 @@ func TestNewAcceptedSignature(t *testing.T) {
 		{
 			uc: "all possible options provided",
 			opts: []AcceptSignatureOption{
-				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
-				WithExpectedKeyID("test"),
+				WithSignatureAlgorithm(EcdsaP256Sha256),
+				WithKeyID("test"),
 				WithExpectedNonce(&NonceGetterMock{}),
-				WithExpectedLabel("foo"),
-				WithExpectedComponents("@status", "content-digest;req"),
+				WithLabel("foo"),
+				WithComponents("@status", "content-digest;req"),
 				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 10}),
-				WithExpectedTag("bar"),
-				WithExpectedCreatedTimestamp(false),
-				WithExpectedExpiresTimestamp(false),
+				WithTag("bar"),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
@@ -312,7 +312,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 		{
 			uc: "option raises error",
 			opts: []AcceptSignatureOption{
-				WithExpectedComponents("@foo"),
+				WithComponents("@foo"),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
@@ -356,11 +356,11 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature only is added",
 			opts: []AcceptSignatureOption{
-				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
-				WithExpectedKeyID("test"),
-				WithExpectedComponents("@status", "x-foo-bar;req", "@method"),
-				WithExpectedLabel("foo"),
-				WithExpectedTag("bar"),
+				WithSignatureAlgorithm(EcdsaP256Sha256),
+				WithKeyID("test"),
+				WithComponents("@status", "x-foo-bar;req", "@method"),
+				WithLabel("foo"),
+				WithTag("bar"),
 				WithExpectedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
@@ -378,11 +378,11 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature and Want-Content-Digest headers are added with default algorithms",
 			opts: []AcceptSignatureOption{
-				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
-				WithExpectedKeyID("test"),
-				WithExpectedComponents("@status", "content-digest", "@method"),
-				WithExpectedLabel("foo"),
-				WithExpectedTag("bar"),
+				WithSignatureAlgorithm(EcdsaP256Sha256),
+				WithKeyID("test"),
+				WithComponents("@status", "content-digest", "@method"),
+				WithLabel("foo"),
+				WithTag("bar"),
 				WithExpectedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
@@ -402,11 +402,11 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		{
 			uc: "Accept-Signature and Want-Content-Digest headers are added with supplied algorithms",
 			opts: []AcceptSignatureOption{
-				WithExpectedSignatureAlgorithm(EcdsaP256Sha256),
-				WithExpectedKeyID("test"),
-				WithExpectedComponents("@status", "content-digest", "@method"),
-				WithExpectedLabel("foo"),
-				WithExpectedTag("bar"),
+				WithSignatureAlgorithm(EcdsaP256Sha256),
+				WithKeyID("test"),
+				WithComponents("@status", "content-digest", "@method"),
+				WithLabel("foo"),
+				WithTag("bar"),
 				WithExpectedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 1}),
 			},

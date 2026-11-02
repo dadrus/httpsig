@@ -427,7 +427,7 @@ func TestExpectationsAssertParameters(t *testing.T) {
 	}
 }
 
-func TestWithRequiredComponents(t *testing.T) {
+func TestWithComponentsForVerifier(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -442,7 +442,7 @@ func TestWithRequiredComponents(t *testing.T) {
 			v := &verifier{}
 			exp := &expectations{}
 
-			err := WithRequiredComponents(tc.identifiers...)(v, exp, false)
+			err := WithComponents(tc.identifiers...).applyVerifierOption(v, exp, false)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -467,7 +467,7 @@ func TestWithValidityTolerance(t *testing.T) {
 	v := &verifier{}
 	exp := &expectations{}
 
-	err := WithValidityTolerance(1*time.Minute)(v, exp, false)
+	err := WithValidityTolerance(1*time.Minute).applyVerifierOption(v, exp, false)
 	require.NoError(t, err)
 
 	assert.Empty(t, v.tagExpectations)
@@ -496,7 +496,7 @@ func TestWithRequiredTag(t *testing.T) {
 		{
 			uc: "with identifiers only",
 			opts: []VerifierOption{
-				WithRequiredComponents("@status"),
+				WithComponents("@status"),
 			},
 			assert: func(t *testing.T, err error, exp *expectations) {
 				t.Helper()
@@ -525,7 +525,7 @@ func TestWithRequiredTag(t *testing.T) {
 		{
 			uc: "with all possible options",
 			opts: []VerifierOption{
-				WithRequiredComponents("@status"),
+				WithComponents("@status"),
 				WithValidityTolerance(5 * time.Minute),
 			},
 			assert: func(t *testing.T, err error, exp *expectations) {
@@ -541,7 +541,7 @@ func TestWithRequiredTag(t *testing.T) {
 		{
 			uc: "with unsupported identifier",
 			opts: []VerifierOption{
-				WithRequiredComponents("@foo"),
+				WithComponents("@foo"),
 			},
 			assert: func(t *testing.T, err error, exp *expectations) {
 				t.Helper()
@@ -586,7 +586,7 @@ func TestWithRequiredTag(t *testing.T) {
 			}
 
 			err := recoverIfPanics(t, func() error {
-				return WithRequiredTag("test", tc.opts...)(v, nil, false)
+				return WithRequiredTag("test", tc.opts...).applyVerifierOption(v, nil, false)
 			})
 			if err == nil {
 				require.Len(t, v.tagExpectations, 1)
@@ -599,7 +599,7 @@ func TestWithRequiredTag(t *testing.T) {
 	t.Run("with duplicate WithRequiredTag", func(t *testing.T) {
 		v := &verifier{tagExpectations: map[string]*expectations{"foo": {}}}
 
-		err := WithRequiredTag("foo", nil)(v, nil, false)
+		err := WithRequiredTag("foo", nil).applyVerifierOption(v, nil, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrParameter)
 		require.ErrorContains(t, err, "already configured")
@@ -612,7 +612,7 @@ func TestWithMaxAge(t *testing.T) {
 	v := &verifier{}
 	exp := &expectations{}
 
-	err := WithMaxAge(15*time.Minute)(v, exp, false)
+	err := WithMaxAge(15*time.Minute).applyVerifierOption(v, exp, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, 15*time.Minute, exp.maxAge)
@@ -625,7 +625,7 @@ func TestWithNonceChecker(t *testing.T) {
 	exp := &expectations{}
 	storage := &NonceCheckerMock{}
 
-	err := WithNonceChecker(storage)(v, exp, false)
+	err := WithNonceChecker(storage).applyVerifierOption(v, exp, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, storage, v.nonceChecker)
@@ -663,11 +663,11 @@ func TestWithSignatureNegotiation(t *testing.T) {
 		{
 			uc: "with all possible options",
 			opts: []SignatureNegotiationOption{
-				WithRequestedLabel("foo"),
+				WithLabel("foo"),
 				WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
-				WithRequestedSignatureAlgorithm(RsaPssSha512),
-				WithRequestedKeyID("bar"),
-				WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
+				WithSignatureAlgorithm(RsaPssSha512),
+				WithKeyID("bar"),
+				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
@@ -694,7 +694,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 		{
 			uc: "with error while applying the option",
 			opts: []SignatureNegotiationOption{
-				WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{}),
+				WithContentDigestAlgorithmPreferences(AlgorithmPreference{}),
 			},
 			assert: func(t *testing.T, err error, _ *AcceptSignatureBuilder) {
 				t.Helper()
@@ -708,7 +708,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 			v := &verifier{}
 			exp := &expectations{}
 
-			err := WithSignatureNegotiation(tc.opts...)(v, exp, false)
+			err := WithSignatureNegotiation(tc.opts...).applyVerifierOption(v, exp, false)
 
 			tc.assert(t, err, exp.asb)
 		})
@@ -749,7 +749,7 @@ func TestNewVerifier(t *testing.T) {
 			uc:       "with component identifiers configuration error",
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredComponents("@foo"),
+				WithComponents("@foo"),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -810,7 +810,7 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test",
 					WithValidityTolerance(1*time.Second),
-					WithRequiredComponents("@status"),
+					WithComponents("@status"),
 				),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -835,7 +835,7 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test"),
 				WithValidityTolerance(1 * time.Second),
-				WithRequiredComponents("@status"),
+				WithComponents("@status"),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
 				t.Helper()
@@ -860,10 +860,10 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test"),
 				WithValidityTolerance(1 * time.Second),
-				WithRequiredComponents("@status", "content-digest"),
+				WithComponents("@status", "content-digest"),
 				WithSignatureNegotiation(
-					WithRequestedSignatureAlgorithm(RsaPssSha512),
-					WithRequestedKeyID("bar"),
+					WithSignatureAlgorithm(RsaPssSha512),
+					WithKeyID("bar"),
 				),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -900,10 +900,10 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test",
 					WithValidityTolerance(1*time.Second),
-					WithRequiredComponents("@status"),
+					WithComponents("@status"),
 				),
 				WithValidityTolerance(1 * time.Minute),
-				WithRequiredComponents("@method"),
+				WithComponents("@method"),
 				WithValidateAllSignatures(),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -1178,8 +1178,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "unsupported signature key",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestampRequired(false),
-				WithCreatedTimestampRequired(false),
+				WithExpiredTimestamp(false),
+				WithCreatedTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1212,8 +1212,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid signature",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestampRequired(false),
-				WithCreatedTimestampRequired(false),
+				WithExpiredTimestamp(false),
+				WithCreatedTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1254,13 +1254,13 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "signature parameters negotiation for not present tagged signature",
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithRequiredComponents("@method", "content-digest"),
+					WithComponents("@method", "content-digest"),
 					WithSignatureNegotiation(
-						WithRequestedSignatureAlgorithm(RsaPssSha512),
-						WithRequestedKeyID("test-key"),
-						WithRequestedLabel("bar"),
+						WithSignatureAlgorithm(RsaPssSha512),
+						WithKeyID("test-key"),
+						WithLabel("bar"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
-						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
+						WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
 					),
 				),
 			},
@@ -1288,11 +1288,11 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithSignatureNegotiation(
-						WithRequestedSignatureAlgorithm(RsaPssSha512),
-						WithRequestedKeyID("test-key"),
-						WithRequestedLabel("bar"),
+						WithSignatureAlgorithm(RsaPssSha512),
+						WithKeyID("test-key"),
+						WithLabel("bar"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
-						WithRequestedContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
+						WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha256, 1}),
 					),
 				),
 			},
@@ -1349,10 +1349,10 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "signature parameters negotiation fails because of nonce error",
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithRequiredComponents("@method"),
+					WithComponents("@method"),
 					WithSignatureNegotiation(
-						WithRequestedSignatureAlgorithm(RsaPssSha512),
-						WithRequestedKeyID("test-key"),
+						WithSignatureAlgorithm(RsaPssSha512),
+						WithKeyID("test-key"),
 						WithRequestedNonce(NonceGetterFunc(func(_ context.Context) (string, error) { return "", errors.New("test error") })),
 					),
 				),
@@ -1372,8 +1372,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "signature verification fails due to invalid second content digest",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1428,8 +1428,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.1. minimal signature using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1492,8 +1492,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.2. selective covered components using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1563,8 +1563,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.3. full coverage using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1643,8 +1643,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.4. signing a response using ecdsa-p256-sha256 ",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:     http.MethodPost,
@@ -1713,8 +1713,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.5. signing a request using hmac-sha256",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1779,8 +1779,8 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "B.2.6. signing a request using ed25519",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithCreatedTimestampRequired(false),
-				WithExpiredTimestampRequired(false),
+				WithCreatedTimestamp(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1851,7 +1851,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid untagged signature is ignored",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestampRequired(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1901,7 +1901,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid untagged signature fails when validating all",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithExpiredTimestampRequired(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1939,7 +1939,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "multiple valid signatures with different keys and metadata",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithExpiredTimestampRequired(false),
+				WithExpiredTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
