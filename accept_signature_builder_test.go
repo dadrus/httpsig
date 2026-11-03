@@ -32,6 +32,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				assert.True(t, asb.addCreatedTS)
 				assert.True(t, asb.addExpiresTS)
 				assert.Nil(t, asb.nonceGetter)
+				assert.Empty(t, asb.parameters)
 				assert.Equal(t, "sig", asb.label)
 				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{
 					AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),
@@ -51,6 +52,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				WithTag("bar"),
 				WithCreatedTimestamp(false),
 				WithExpiredTimestamp(false),
+				WithParameter("audience", "service-a"),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
@@ -67,9 +69,22 @@ func TestNewAcceptedSignature(t *testing.T) {
 				assert.False(t, asb.addExpiresTS)
 				assert.Equal(t, &NonceGetterMock{}, asb.nonceGetter)
 				assert.Equal(t, "foo", asb.label)
+				assert.Equal(t, []parameterOption{{name: "audience", value: "service-a"}}, asb.parameters)
 				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{
 					AlgorithmPreference{Algorithm: Sha512, Preference: 10}.String(),
 				})
+			},
+		},
+		{
+			uc: "invalid extension parameter",
+			opts: []AcceptSignatureOption{
+				WithParameter("keyid", "reserved"),
+			},
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Nil(t, asb)
 			},
 		},
 		{
@@ -185,8 +200,65 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 			},
 		},
 		{
-			uc:        "unsupported parameter in Build",
+			uc:        "additional extension at Build",
 			buildOpts: []AcceptSignatureBuildOption{WithParameter("other", "value")},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+				require.NoError(t, err)
+				assert.Equal(t, `sig=();created;expires;other="value"`, hdr.Get(headerAcceptSignature))
+			},
+		},
+		{
+			uc: "static and dynamic extensions",
+			opts: []AcceptSignatureOption{
+				WithParameter("audience", "service-a"),
+				WithParameter("flag", true),
+			},
+			buildOpts: []AcceptSignatureBuildOption{WithParameter("challenge", Token("example"))},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+				require.NoError(t, err)
+				assert.Equal(t, `sig=();created;expires;audience="service-a";flag;challenge=example`, hdr.Get(headerAcceptSignature))
+			},
+		},
+		{
+			uc: "extension types",
+			opts: []AcceptSignatureOption{
+				WithParameter("integer", 42),
+				WithParameter("decimal", 1.5),
+				WithParameter("bytes", []byte("hello")),
+			},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+				require.NoError(t, err)
+				assert.Equal(t, `sig=();created;expires;integer=42;decimal=1.5;bytes=:aGVsbG8=:`, hdr.Get(headerAcceptSignature))
+			},
+		},
+		{
+			uc:        "conflicting static and dynamic extension",
+			opts:      []AcceptSignatureOption{WithParameter("audience", "static")},
+			buildOpts: []AcceptSignatureBuildOption{WithParameter("audience", "dynamic")},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, hdr)
+			},
+		},
+		{
+			uc: "duplicate extension at Build",
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("audience", "first"),
+				WithParameter("audience", "second"),
+			},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, hdr)
+			},
+		},
+		{
+			uc:        "invalid extension at Build",
+			buildOpts: []AcceptSignatureBuildOption{WithParameter("other", "bad\nvalue")},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.ErrorIs(t, err, ErrParameter)
@@ -311,5 +383,37 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, `sig=();created;expires;nonce="generated"`, second.Get(headerAcceptSignature))
 		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("per-call extension is not retained", func(t *testing.T) {
+		builder, err := NewAcceptSignature(WithParameter("audience", "service-a"))
+		require.NoError(t, err)
+
+		first := make(http.Header)
+		err = builder.Build(context.TODO(), first, WithParameter("challenge", "first"))
+		require.NoError(t, err)
+		assert.Equal(t, `sig=();created;expires;audience="service-a";challenge="first"`, first.Get(headerAcceptSignature))
+
+		second := make(http.Header)
+		err = builder.Build(context.TODO(), second, WithParameter("challenge", "second"))
+		require.NoError(t, err)
+		assert.Equal(t, `sig=();created;expires;audience="service-a";challenge="second"`, second.Get(headerAcceptSignature))
+
+		third := make(http.Header)
+		err = builder.Build(context.TODO(), third)
+		require.NoError(t, err)
+		assert.Equal(t, `sig=();created;expires;audience="service-a"`, third.Get(headerAcceptSignature))
+	})
+
+	t.Run("static byte sequence is not affected by caller mutation", func(t *testing.T) {
+		value := []byte("before")
+		builder, err := NewAcceptSignature(WithParameter("bytes", value))
+		require.NoError(t, err)
+
+		value[0] = 'X'
+		hdr := make(http.Header)
+		err = builder.Build(context.TODO(), hdr)
+		require.NoError(t, err)
+		assert.Equal(t, `sig=();created;expires;bytes=:YmVmb3Jl:`, hdr.Get(headerAcceptSignature))
 	})
 }

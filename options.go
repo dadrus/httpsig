@@ -17,8 +17,10 @@ type signOptions struct {
 }
 
 type acceptSignatureBuildOptions struct {
-	nonce    string
-	nonceSet bool
+	nonce            string
+	nonceSet         bool
+	staticParameters []parameterOption
+	parameters       []parameterOption
 }
 
 type sigNegotiationOptions struct {
@@ -224,12 +226,13 @@ func WithAlg() SignerOption {
 	})
 }
 
-// WithParameter specifies a signature parameter for NewSigner or an individual
-// Sign call. It also allows AcceptSignatureBuilder.Build to request a nonce.
-// Extension values may be string, Token, bool, int, int64, float64, or []byte.
-// Standard RFC 9421 parameter names are reserved, except for a non-empty
-// string nonce on Sign or Build. Build accepts no other parameter names.
-// Duplicate names are rejected.
+// WithParameter specifies an extension parameter for signing or requesting a
+// signature, either in the reusable configuration or for a single call.
+// It can also be used in WithSignatureNegotiation. Extension values may be
+// string, Token, bool, int, int64, float64, or []byte. Standard RFC 9421
+// parameter names are reserved, except for a non-empty string nonce on Sign
+// or AcceptSignatureBuilder.Build. Duplicate names are rejected, including
+// duplicates between builder configuration and Build options.
 func WithParameter(name string, value any) parameterOption {
 	return parameterOption{name: name, value: value}
 }
@@ -263,24 +266,32 @@ func (o parameterOption) applySignOption(opts *signOptions) error {
 	return addParameter(&opts.parameters, opts.staticParameters, o, false)
 }
 
+func (o parameterOption) applyAcceptSignatureOption(asb *AcceptSignatureBuilder) error {
+	return addParameter(&asb.parameters, nil, o, true)
+}
+
+func (o parameterOption) applySignatureNegotiationOption(opts *sigNegotiationOptions) {
+	opts.opts = append(opts.opts, o)
+}
+
 func (o parameterOption) applyAcceptSignatureBuildOption(opts *acceptSignatureBuildOptions) error {
-	if o.name != string(Nonce) {
-		return fmt.Errorf("%w: unsupported Accept-Signature parameter %q", ErrParameter, o.name)
+	if o.name == string(Nonce) {
+		if opts.nonceSet {
+			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
+		}
+
+		nonce, err := validateNonceOption(o.value)
+		if err != nil {
+			return err
+		}
+
+		opts.nonce = nonce
+		opts.nonceSet = true
+
+		return nil
 	}
 
-	if opts.nonceSet {
-		return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
-	}
-
-	nonce, err := validateNonceOption(o.value)
-	if err != nil {
-		return err
-	}
-
-	opts.nonce = nonce
-	opts.nonceSet = true
-
-	return nil
+	return addParameter(&opts.parameters, opts.staticParameters, o, false)
 }
 
 func validateNonceOption(value any) (string, error) {

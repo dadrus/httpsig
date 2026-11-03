@@ -162,22 +162,12 @@ type expectations struct {
 }
 
 // nolint: funlen, cyclop
-func (e *expectations) assert(
-	si *signatureInput,
-	msg *Message,
-	keyAlg SignatureAlgorithm,
-) error {
+func (e *expectations) assertMetadata(si *signatureInput, msg *Message) error {
 	var (
 		missingComponents []string
 		cmv               compositeMessageVerifier
 		mv                messageVerifier
 	)
-
-	algorithm, algPresent := si.algorithm()
-	if algPresent && algorithm != keyAlg {
-		return fmt.Errorf("%w: key algorithm %s does not match signature algorithm %s",
-			ErrParameter, algorithm, keyAlg)
-	}
 
 	now := currentTime().UTC()
 
@@ -232,6 +222,16 @@ func (e *expectations) assert(
 	}
 
 	return mv.verify(msg)
+}
+
+func (e *expectations) assertKeyAlgorithm(si *signatureInput, keyAlg SignatureAlgorithm) error {
+	algorithm, algPresent := si.algorithm()
+	if algPresent && algorithm != keyAlg {
+		return fmt.Errorf("%w: key algorithm %s does not match signature algorithm %s",
+			ErrParameter, algorithm, keyAlg)
+	}
+
+	return nil
 }
 
 type verifier struct {
@@ -366,6 +366,10 @@ func (v *verifier) verifySignature(
 	si *signatureInput,
 	exp *expectations,
 ) (VerifiedSignature, error) {
+	if err := exp.assertMetadata(si, msg); err != nil {
+		return VerifiedSignature{}, err
+	}
+
 	base, err := newSignatureBase(msg, si, nil)
 	if err != nil {
 		return VerifiedSignature{}, err
@@ -384,7 +388,7 @@ func (v *verifier) verifySignature(
 		return VerifiedSignature{}, err
 	}
 
-	if err = exp.assert(si, msg, keyInfo.Key.Algorithm); err != nil {
+	if err = exp.assertKeyAlgorithm(si, keyInfo.Key.Algorithm); err != nil {
 		return VerifiedSignature{}, err
 	}
 

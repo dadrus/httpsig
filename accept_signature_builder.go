@@ -31,6 +31,7 @@ type AcceptSignatureBuilder struct {
 	nonceGetter        NonceGetter
 	label              string
 	identifiers        []*componentIdentifier
+	parameters         []parameterOption
 	cdAlgPrefs         []string
 	tag                string
 	addCreatedTS       bool
@@ -64,18 +65,19 @@ func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder,
 
 // Build appends an Accept-Signature header to header using the configured
 // signature requirements. If Content-Digest is requested, it also appends
-// Want-Content-Digest preferences. A non-empty nonce may be provided for this
+// Want-Content-Digest preferences. Additional extension parameters can be
+// supplied with WithParameter. A non-empty nonce may be provided for this
 // call with WithParameter("nonce", value), overriding a configured
 // WithNonceGetter without invoking it. Otherwise, the configured getter is
 // used if present; if neither is provided, no nonce is requested. Options
-// do not modify this reusable builder. The caller must provide a writable,
-// non-nil http.Header.
+// do not modify the builder. The caller must provide a writable, non-nil
+// http.Header.
 func (asb *AcceptSignatureBuilder) Build(
 	ctx context.Context,
 	header http.Header,
 	opts ...AcceptSignatureBuildOption,
 ) error {
-	callOptions := acceptSignatureBuildOptions{}
+	callOptions := acceptSignatureBuildOptions{staticParameters: asb.parameters}
 	for _, opt := range opts {
 		if err := opt.applyAcceptSignatureBuildOption(&callOptions); err != nil {
 			return err
@@ -100,6 +102,14 @@ func (asb *AcceptSignatureBuilder) Build(
 		asb.keyID,
 		asb.signatureAlgorithm,
 		asb.identifiers)
+
+	for _, param := range asb.parameters {
+		sigReqs.Params.Add(param.name, param.value)
+	}
+
+	for _, param := range callOptions.parameters {
+		sigReqs.Params.Add(param.name, param.value)
+	}
 
 	dict := httpsfv.NewDictionary()
 	dict.Add(asb.label, sigReqs.InnerList)

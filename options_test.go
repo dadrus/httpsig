@@ -475,19 +475,87 @@ func TestWithParameterForSign(t *testing.T) {
 	})
 }
 
+func TestWithParameterForAcceptSignature(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		value any
+		want  any
+	}{
+		"string":        {value: "value", want: "value"},
+		"token":         {value: Token("value"), want: httpsfv.Token("value")},
+		"integer":       {value: 42, want: int64(42)},
+		"decimal":       {value: 1.5, want: 1.5},
+		"boolean":       {value: true, want: true},
+		"byte sequence": {value: []byte("value"), want: []byte("value")},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			asb := &AcceptSignatureBuilder{}
+
+			err := WithParameter("example", tc.value).applyAcceptSignatureOption(asb)
+
+			require.NoError(t, err)
+			require.Len(t, asb.parameters, 1)
+			assert.Equal(t, "example", asb.parameters[0].name)
+			assert.Equal(t, tc.want, asb.parameters[0].value)
+		})
+	}
+
+	t.Run("static byte sequence is copied", func(t *testing.T) {
+		value := []byte("before")
+		asb := &AcceptSignatureBuilder{}
+
+		err := WithParameter("example", value).applyAcceptSignatureOption(asb)
+		require.NoError(t, err)
+
+		value[0] = 'X'
+		assert.Equal(t, []byte("before"), asb.parameters[0].value)
+	})
+
+	for uc, param := range map[string]parameterOption{
+		"reserved parameter": WithParameter("created", int64(1)),
+		"static nonce":       WithParameter("nonce", "fixed"),
+		"invalid name":       WithParameter("invalid name", "value"),
+		"invalid string":     WithParameter("example", "bad\nvalue"),
+		"unsupported type":   WithParameter("example", struct{}{}),
+	} {
+		t.Run(uc, func(t *testing.T) {
+			asb := &AcceptSignatureBuilder{}
+
+			err := param.applyAcceptSignatureOption(asb)
+
+			require.ErrorIs(t, err, ErrParameter)
+			assert.Empty(t, asb.parameters)
+		})
+	}
+
+	t.Run("duplicate parameter", func(t *testing.T) {
+		asb := &AcceptSignatureBuilder{}
+		require.NoError(t, WithParameter("example", "first").applyAcceptSignatureOption(asb))
+
+		err := WithParameter("example", "second").applyAcceptSignatureOption(asb)
+
+		require.ErrorIs(t, err, ErrParameter)
+		require.Len(t, asb.parameters, 1)
+		assert.Equal(t, "first", asb.parameters[0].value)
+	})
+}
+
 func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 	t.Parallel()
 
 	for uc, tc := range map[string]struct {
 		param   parameterOption
-		want    string
+		want    any
 		wantErr bool
 	}{
 		"nonce":                     {param: WithParameter("nonce", "request-nonce"), want: "request-nonce"},
-		"other parameter":           {param: WithParameter("extension", "value"), wantErr: true},
+		"extension":                 {param: WithParameter("extension", Token("value")), want: httpsfv.Token("value")},
 		"empty nonce":               {param: WithParameter("nonce", ""), wantErr: true},
 		"nonce with incorrect type": {param: WithParameter("nonce", Token("value")), wantErr: true},
 		"invalid nonce string":      {param: WithParameter("nonce", "bad\nvalue"), wantErr: true},
+		"reserved parameter":        {param: WithParameter("created", true), wantErr: true},
+		"invalid extension":         {param: WithParameter("extension", "bad\nvalue"), wantErr: true},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			opts := &acceptSignatureBuildOptions{}
@@ -497,13 +565,20 @@ func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 			if tc.wantErr {
 				require.ErrorIs(t, err, ErrParameter)
 				assert.False(t, opts.nonceSet)
+				assert.Empty(t, opts.parameters)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.True(t, opts.nonceSet)
-			assert.Equal(t, tc.want, opts.nonce)
+
+			if tc.param.name == "nonce" {
+				assert.True(t, opts.nonceSet)
+				assert.Equal(t, tc.want, opts.nonce)
+			} else {
+				require.Len(t, opts.parameters, 1)
+				assert.Equal(t, tc.want, opts.parameters[0].value)
+			}
 		})
 	}
 
@@ -515,6 +590,28 @@ func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 
 		require.ErrorIs(t, err, ErrParameter)
 		assert.Equal(t, "first", opts.nonce)
+	})
+
+	t.Run("duplicate extension", func(t *testing.T) {
+		opts := &acceptSignatureBuildOptions{}
+		require.NoError(t, WithParameter("extension", "first").applyAcceptSignatureBuildOption(opts))
+
+		err := WithParameter("extension", "second").applyAcceptSignatureBuildOption(opts)
+
+		require.ErrorIs(t, err, ErrParameter)
+		require.Len(t, opts.parameters, 1)
+		assert.Equal(t, "first", opts.parameters[0].value)
+	})
+
+	t.Run("extension conflicts with static parameter", func(t *testing.T) {
+		opts := &acceptSignatureBuildOptions{
+			staticParameters: []parameterOption{{name: "extension", value: "static"}},
+		}
+
+		err := WithParameter("extension", "per-call").applyAcceptSignatureBuildOption(opts)
+
+		require.ErrorIs(t, err, ErrParameter)
+		assert.Empty(t, opts.parameters)
 	})
 }
 
@@ -795,6 +892,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
 				WithSignatureAlgorithm(RsaPssSha512),
 				WithKeyID("bar"),
+				WithParameter("audience", "service-a"),
 				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 2}),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
@@ -811,12 +909,22 @@ func TestWithSignatureNegotiation(t *testing.T) {
 				assert.ElementsMatch(t, asb.cdAlgPrefs, []string{"sha-512=2"})
 				assert.Equal(t, RsaPssSha512, asb.signatureAlgorithm)
 				assert.Equal(t, "bar", asb.keyID)
+				require.Len(t, asb.parameters, 1)
+				assert.Equal(t, parameterOption{name: "audience", value: "service-a"}, asb.parameters[0])
 				// not set by any of the options
 				assert.True(t, asb.addCreatedTS)
 				assert.True(t, asb.addExpiresTS)
 				assert.False(t, asb.wantContentDigest)
 				assert.Empty(t, asb.tag)
 				assert.Empty(t, asb.identifiers)
+			},
+		},
+		"with invalid custom parameter": {
+			opts: []SignatureNegotiationOption{WithParameter("created", true)},
+			assert: func(t *testing.T, err error, _ *AcceptSignatureBuilder) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
 			},
 		},
 		"with error while applying the option": {
