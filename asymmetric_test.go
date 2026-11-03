@@ -48,7 +48,6 @@ func TestNewECDSASigner(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
 				assert.Equal(t, tc.key, sig.privateKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -80,7 +79,7 @@ func TestECDSASignerSignPayload(t *testing.T) {
 			sig, err := newECDSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
-			res, err := sig.signPayload(message)
+			res, err := sig.sign(t.Context(), message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
@@ -141,7 +140,6 @@ func TestNewRSASigner(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
 				assert.Equal(t, tc.key, sig.privateKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -178,7 +176,7 @@ func TestRSASignerSignPayload(t *testing.T) {
 			sig, err := newRSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
-			res, err := sig.signPayload(message)
+			res, err := sig.sign(t.Context(), message)
 			if tc.err != nil {
 				require.Error(t, err)
 				require.ErrorIs(t, err, tc.err)
@@ -234,7 +232,6 @@ func TestNewEd25519Signer(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
 				assert.Equal(t, tc.key, sig.privateKey)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -251,7 +248,7 @@ func TestEd25519SignerSignPayload(t *testing.T) {
 	sig, err := newEd25519Signer(privKey, Ed25519)
 	require.NoError(t, err)
 
-	res, err := sig.signPayload(message)
+	res, err := sig.sign(t.Context(), message)
 	require.NoError(t, err)
 
 	ok := ed25519.Verify(pubKey, message, res)
@@ -389,14 +386,14 @@ func TestECDSAverifierVerifyPayload(t *testing.T) {
 			sig, err := newECDSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
-			res, err := sig.signPayload(message)
+			res, err := sig.sign(t.Context(), message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
 			ver, err := newECDSAVerifier(&tc.key.PublicKey, tc.alg)
 			require.NoError(t, err)
 
-			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
+			err = ver.verify(t.Context(), mutateMessage(t, message), mutateSignature(t, res))
 
 			if tc.shouldError {
 				require.Error(t, err)
@@ -555,14 +552,14 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 			sig, err := newRSASigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
-			res, err := sig.signPayload(message)
+			res, err := sig.sign(t.Context(), message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
 			ver, err := newRSAVerifier(&tc.key.PublicKey, tc.alg)
 			require.NoError(t, err)
 
-			err = ver.verifyPayload(mutateMessage(t, message), mutateSignature(t, res))
+			err = ver.verify(t.Context(), mutateMessage(t, message), mutateSignature(t, res))
 
 			if tc.shouldError {
 				require.Error(t, err)
@@ -619,28 +616,28 @@ func TestEd25519VerifierVerifyPayload(t *testing.T) {
 	sig, err := newEd25519Signer(privKey, Ed25519)
 	require.NoError(t, err)
 
-	res, err := sig.signPayload(message)
+	res, err := sig.sign(t.Context(), message)
 	require.NoError(t, err)
 
-	ver, err := newEd25519Verifier(pubKey, sig.alg)
+	ver, err := newEd25519Verifier(pubKey, Ed25519)
 	require.NoError(t, err)
 
 	// valid signature
-	err = ver.verifyPayload(message, res)
+	err = ver.verify(t.Context(), message, res)
 	require.NoError(t, err)
 
 	// invalid signature for the given message
-	err = ver.verifyPayload([]byte("test"), res)
+	err = ver.verify(t.Context(), []byte("test"), res)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidSignature)
 
 	// too short signature
-	err = ver.verifyPayload(message, res[0:len(res)-1])
+	err = ver.verify(t.Context(), message, res[0:len(res)-1])
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidSignature)
 
 	// too long signature
-	err = ver.verifyPayload(message, append(res, 0x00))
+	err = ver.verify(t.Context(), message, append(res, 0x00))
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidSignature)
 }

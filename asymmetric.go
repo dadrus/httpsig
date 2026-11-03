@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -41,21 +42,17 @@ func newECDSASigner(privateKey *ecdsa.PrivateKey, alg SignatureAlgorithm) (*ecds
 	}
 
 	return &ecdsaSigner{
-		alg:        alg,
 		privateKey: privateKey,
 		hash:       hash,
 	}, nil
 }
 
 type ecdsaSigner struct {
-	alg        SignatureAlgorithm
 	privateKey *ecdsa.PrivateKey
 	hash       crypto.Hash
 }
 
-func (ecs *ecdsaSigner) algorithm() SignatureAlgorithm { return ecs.alg }
-
-func (ecs *ecdsaSigner) signPayload(payload []byte) ([]byte, error) {
+func (ecs *ecdsaSigner) sign(_ context.Context, payload []byte) ([]byte, error) {
 	hasher := ecs.hash.New()
 	// According to documentation, Write() on hash never fails
 	_, _ = hasher.Write(payload)
@@ -112,9 +109,7 @@ type rsaSigner struct {
 	hash       crypto.Hash
 }
 
-func (s *rsaSigner) algorithm() SignatureAlgorithm { return s.alg }
-
-func (s *rsaSigner) signPayload(payload []byte) ([]byte, error) {
+func (s *rsaSigner) sign(_ context.Context, payload []byte) ([]byte, error) {
 	var (
 		out []byte
 		err error
@@ -157,19 +152,15 @@ func newEd25519Signer(privateKey ed25519.PrivateKey, alg SignatureAlgorithm) (*e
 	}
 
 	return &ed25519Signer{
-		alg:        alg,
 		privateKey: privateKey,
 	}, nil
 }
 
 type ed25519Signer struct {
-	alg        SignatureAlgorithm
 	privateKey ed25519.PrivateKey
 }
 
-func (s *ed25519Signer) algorithm() SignatureAlgorithm { return s.alg }
-
-func (s *ed25519Signer) signPayload(payload []byte) ([]byte, error) {
+func (s *ed25519Signer) sign(_ context.Context, payload []byte) ([]byte, error) {
 	return ed25519.Sign(s.privateKey, payload), nil
 }
 
@@ -204,7 +195,6 @@ func newECDSAVerifier(publicKey *ecdsa.PublicKey, alg SignatureAlgorithm) (*ecds
 	}
 
 	return &ecdsaVerifier{
-		alg:       alg,
 		publicKey: publicKey,
 		hash:      hash,
 	}, nil
@@ -212,11 +202,10 @@ func newECDSAVerifier(publicKey *ecdsa.PublicKey, alg SignatureAlgorithm) (*ecds
 
 type ecdsaVerifier struct {
 	publicKey *ecdsa.PublicKey
-	alg       SignatureAlgorithm
 	hash      crypto.Hash
 }
 
-func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *ecdsaVerifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	hasher := v.hash.New()
 	// According to documentation, Write() on hash never fails
 	_, _ = hasher.Write(payload)
@@ -275,7 +264,7 @@ type rsaVerifier struct {
 	hash      crypto.Hash
 }
 
-func (v *rsaVerifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *rsaVerifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	hasher := v.hash.New()
 
 	// According to documentation, Write() on hash never fails
@@ -313,16 +302,14 @@ func newEd25519Verifier(publicKey ed25519.PublicKey, alg SignatureAlgorithm) (*e
 
 	return &ed25519Verifier{
 		publicKey: publicKey,
-		alg:       alg,
 	}, nil
 }
 
 type ed25519Verifier struct {
-	alg       SignatureAlgorithm
 	publicKey ed25519.PublicKey
 }
 
-func (v *ed25519Verifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *ed25519Verifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	if ok := ed25519.Verify(v.publicKey, payload, signature); !ok {
 		return ErrInvalidSignature
 	}

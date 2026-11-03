@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -134,7 +135,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 }
 
 type payloadVerifier interface {
-	verifyPayload(data []byte, signature []byte) error
+	verify(ctx context.Context, data []byte, signature []byte) error
 }
 
 func newPayloadVerifier(verificationKey any, alg SignatureAlgorithm) (payloadVerifier, error) {
@@ -397,7 +398,7 @@ func (v *verifier) verifySignature(
 		return VerifiedSignature{}, err
 	}
 
-	err = verifier.verifyPayload(base.marshal(), signature)
+	err = verifier.verify(msg.Context, base.marshal(), signature)
 	if err != nil {
 		return VerifiedSignature{}, err
 	}

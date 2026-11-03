@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -12,8 +13,7 @@ import (
 )
 
 type payloadSigner interface {
-	signPayload(data []byte) ([]byte, error)
-	algorithm() SignatureAlgorithm
+	sign(ctx context.Context, data []byte) ([]byte, error)
 }
 
 func newPayloadSigner(signingKey any, alg SignatureAlgorithm) (payloadSigner, error) {
@@ -56,10 +56,11 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	}
 
 	sig := &signer{
-		label: "sig",
-		ttl:   30 * time.Second, //nolint:mnd
-		ps:    ps,
-		mu:    noopMessageUpdater{},
+		label:  "sig",
+		ttl:    30 * time.Second, //nolint:mnd
+		ps:     ps,
+		mu:     noopMessageUpdater{},
+		sigAlg: key.Algorithm,
 	}
 
 	for _, opt := range opts {
@@ -69,11 +70,11 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	}
 
 	if sig.includeAlg {
-		switch sig.ps.algorithm() {
+		switch key.Algorithm {
 		case RsaPssSha512, RsaPkcs1v15Sha256, HmacSha256, EcdsaP256Sha256, EcdsaP384Sha384, Ed25519:
 		default:
 			return nil, fmt.Errorf("%w: %s is not registered for HTTP Message Signatures",
-				ErrUnsupportedAlgorithm, sig.ps.algorithm())
+				ErrUnsupportedAlgorithm, key.Algorithm)
 		}
 	}
 
@@ -113,6 +114,7 @@ type signer struct {
 	keyID                 string
 	includeAlg            bool
 	ps                    payloadSigner
+	sigAlg                SignatureAlgorithm
 	cdAlg                 DigestAlgorithm
 	parameters            []parameterOption
 	mu                    messageUpdater
@@ -137,7 +139,7 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 		return nil, err
 	}
 
-	signature, err := s.ps.signPayload(base.marshal())
+	signature, err := s.ps.sign(msg.Context, base.marshal())
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +167,7 @@ func (s *signer) signatureInput(opts signOptions) *signatureInput {
 	}
 
 	if s.includeAlg {
-		params.Add(string(Alg), string(s.ps.algorithm()))
+		params.Add(string(Alg), string(s.sigAlg))
 	}
 
 	if opts.nonceSet {
