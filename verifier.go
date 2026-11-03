@@ -366,7 +366,7 @@ func (v *verifier) verifySignature(
 	si *signatureInput,
 	exp *expectations,
 ) (VerifiedSignature, error) {
-	base, err := newSignatureBase(si, msg)
+	base, err := newSignatureBase(msg, si, nil)
 	if err != nil {
 		return VerifiedSignature{}, err
 	}

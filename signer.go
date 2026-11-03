@@ -89,20 +89,31 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 		sig.mu = cmv
 	}
 
+	// Covered components are fixed for the lifetime of this Signer.
+	// Prepare their Structured-Fields identifiers once for the signature base.
+	sig.serializedIdentifiers = make([]string, len(sig.ids))
+	for i, id := range sig.ids {
+		sig.serializedIdentifiers[i], err = httpsfv.Marshal(id.Item)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return sig, nil
 }
 
 type signer struct {
-	label      string
-	ids        []*componentIdentifier
-	ttl        time.Duration
-	tag        string
-	keyID      string
-	includeAlg bool
-	ps         payloadSigner
-	cdAlg      DigestAlgorithm
-	parameters []parameterOption
-	mu         messageUpdater
+	label                 string
+	ids                   []*componentIdentifier
+	serializedIdentifiers []string
+	ttl                   time.Duration
+	tag                   string
+	keyID                 string
+	includeAlg            bool
+	ps                    payloadSigner
+	cdAlg                 DigestAlgorithm
+	parameters            []parameterOption
+	mu                    messageUpdater
 }
 
 func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
@@ -119,7 +130,7 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 		return nil, err
 	}
 
-	base, err := newSignatureBase(params, msg)
+	base, err := newSignatureBase(msg, params, s.serializedIdentifiers)
 	if err != nil {
 		return nil, err
 	}

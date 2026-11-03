@@ -39,13 +39,11 @@ func TestNewSignatureBase(t *testing.T) {
 	created, err := time.Parse(time.RFC1123, "Tue, 20 Apr 2021 02:07:53 GMT")
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc         string
+	for uc, tc := range map[string]struct {
 		components []string
 		assert     func(t *testing.T, err error, base signatureBase)
 	}{
-		{
-			uc: "successful signature base creation",
+		"successful signature base creation": {
 			components: []string{
 				"@method", "@authority", "@path", "content-digest", "content-length", "content-type",
 			},
@@ -67,8 +65,7 @@ func TestNewSignatureBase(t *testing.T) {
 				assert.Equal(t, expected, string(sigBase))
 			},
 		},
-		{
-			uc: "failing for duplicate component identifier",
+		"failing for duplicate component identifier": {
 			components: []string{
 				"@method", "@method",
 			},
@@ -80,8 +77,7 @@ func TestNewSignatureBase(t *testing.T) {
 				require.ErrorContains(t, err, "duplicate component identifier")
 			},
 		},
-		{
-			uc: "failing for duplicate parameterized component identifier",
+		"failing for duplicate parameterized component identifier": {
 			components: []string{
 				`@query-param;name="Pet"`,
 				`@query-param;name="Pet"`,
@@ -94,8 +90,7 @@ func TestNewSignatureBase(t *testing.T) {
 				require.ErrorContains(t, err, "duplicate component identifier")
 			},
 		},
-		{
-			uc:         "failing for unknown component identifier",
+		"failing for unknown component identifier": {
 			components: []string{"@status"},
 			assert: func(t *testing.T, err error, _ signatureBase) {
 				t.Helper()
@@ -105,8 +100,7 @@ func TestNewSignatureBase(t *testing.T) {
 				require.ErrorContains(t, err, "@status")
 			},
 		},
-		{
-			uc: "allowing same component identifier with different parameters",
+		"allowing same component identifier with different parameters": {
 			components: []string{
 				`@query-param;name="Pet"`,
 				`@query-param;name="Cat"`,
@@ -126,7 +120,7 @@ func TestNewSignatureBase(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			identifiers, err := toComponentIdentifiers(tc.components)
 			require.NoError(t, err)
 
@@ -136,26 +130,121 @@ func TestNewSignatureBase(t *testing.T) {
 
 			si := newSignatureInput(identifiers, params)
 
-			sigBase, err := newSignatureBase(si, msg)
+			sigBase, err := newSignatureBase(msg, si, nil)
 
 			tc.assert(t, err, sigBase)
 		})
 	}
 }
 
+func TestNewSignatureBaseWithPreparedIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	for name, identifiers := range map[string][]string{
+		"no covered components":        {},
+		"simple component":             {"@method"},
+		"several components":           {"@method", "@authority", "x-example"},
+		"parameterized components":     {"@method", `@query-param;name="Pet"`, `@query-param;name="Cat"`},
+		"duplicate component":          {"@method", "@method"},
+		"duplicate parameterized item": {`@query-param;name="Pet"`, `@query-param;name="Pet"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			sgnr, err := NewSigner(
+				Key{Algorithm: HmacSha256, Material: []byte("test-hmac-key")},
+				WithComponents(identifiers...),
+			)
+			require.NoError(t, err)
+
+			s := sgnr.(*signer)
+
+			require.Len(t, s.serializedIdentifiers, len(s.ids))
+
+			for i, id := range s.ids {
+				want, marshalErr := httpsfv.Marshal(id.Item)
+				require.NoError(t, marshalErr)
+				assert.Equal(t, want, s.serializedIdentifiers[i])
+			}
+
+			msg := &Message{
+				Method: "GET", Authority: "example.com",
+				URL:       &url.URL{Path: "/foo", RawQuery: "Pet=dog&Cat=meow"},
+				Header:    http.Header{"X-Example": []string{"value"}},
+				IsRequest: true,
+			}
+			input := s.signatureInput(signOptions{})
+			uncached, uncachedErr := newSignatureBase(msg, input, nil)
+			prepared, preparedErr := newSignatureBase(msg, input, s.serializedIdentifiers)
+
+			if uncachedErr != nil {
+				require.ErrorIs(t, preparedErr, ErrMalformedData)
+				require.ErrorIs(t, uncachedErr, ErrMalformedData)
+
+				return
+			}
+
+			require.NoError(t, preparedErr)
+			assert.Equal(t, uncached.marshal(), prepared.marshal())
+			assert.Equal(t, uncached.components(), prepared.components())
+		})
+	}
+}
+
+func TestNewSignatureBaseWithInvalidPreparedIdentifierCount(t *testing.T) {
+	t.Parallel()
+
+	ids, err := toComponentIdentifiers([]string{"@method"})
+	require.NoError(t, err)
+
+	input := newSignatureInput(ids, httpsfv.NewParams())
+	msg := &Message{Method: "GET", IsRequest: true}
+
+	_, err = newSignatureBase(msg, input, []string{"one", "two"})
+
+	require.ErrorIs(t, err, ErrMalformedData)
+}
+
 func TestSignatureBaseMarshal(t *testing.T) {
 	t.Parallel()
 
-	base := signatureBase{
-		entries: []serializedComponent{
-			{identifier: `"@authority"`, value: "foo.bar"},
-			{identifier: `"@method"`, value: "GET"},
+	for name, tc := range map[string]struct {
+		base signatureBase
+		want string
+	}{
+		"empty": {},
+		"signature parameters only": {
+			base: signatureBase{signatureParams: `("@method");created=123`},
+			want: `"@signature-params": ("@method");created=123`,
 		},
+		"single component without parameters": {
+			base: signatureBase{entries: []serializedComponent{{identifier: `"@method"`, value: "GET"}}},
+			want: `"@method": GET`,
+		},
+		"multiple components without parameters": {
+			base: signatureBase{entries: []serializedComponent{
+				{identifier: `"@authority"`, value: "foo.bar"},
+				{identifier: `"@method"`, value: "GET"},
+			}},
+			want: "\"@authority\": foo.bar\n\"@method\": GET",
+		},
+		"empty and UTF-8 component values with parameters": {
+			base: signatureBase{
+				entries: []serializedComponent{
+					{identifier: `"x-empty"`, value: ""},
+					{identifier: `"x-name"`, value: "Grüße"},
+				},
+				signatureParams: `("x-empty" "x-name");created=123`,
+			},
+			want: "\"x-empty\": \n\"x-name\": Grüße\n\"@signature-params\": (\"x-empty\" \"x-name\");created=123",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tc.want, string(tc.base.marshal()))
+		})
 	}
-
-	res := base.marshal()
-
-	assert.Equal(t, "\"@authority\": foo.bar\n\"@method\": GET", string(res))
 }
 
 func TestSignatureBaseComponents(t *testing.T) {

@@ -1,7 +1,6 @@
 package httpsig
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
@@ -20,7 +19,11 @@ type signatureBase struct {
 	signatureParams string
 }
 
-func newSignatureBase(si *signatureInput, msg *Message) (signatureBase, error) {
+func newSignatureBase(msg *Message, si *signatureInput, prepared []string) (signatureBase, error) {
+	if prepared != nil && len(prepared) != len(si.identifiers) {
+		return signatureBase{}, fmt.Errorf("%w: mismatched serialized component identifiers", ErrMalformedData)
+	}
+
 	marshalledSigParams, err := httpsfv.Marshal(si.value)
 	if err != nil {
 		return signatureBase{}, err
@@ -33,10 +36,15 @@ func newSignatureBase(si *signatureInput, msg *Message) (signatureBase, error) {
 	}
 	seen := make(map[string]struct{}, len(si.identifiers))
 
-	for _, ci := range si.identifiers {
-		identifier, err := httpsfv.Marshal(ci.Item)
-		if err != nil {
-			return signatureBase{}, err
+	for i, ci := range si.identifiers {
+		var identifier string
+		if prepared == nil {
+			identifier, err = httpsfv.Marshal(ci.Item)
+			if err != nil {
+				return signatureBase{}, err
+			}
+		} else {
+			identifier = prepared[i]
 		}
 
 		if _, ok := seen[identifier]; ok {
@@ -60,28 +68,49 @@ func newSignatureBase(si *signatureInput, msg *Message) (signatureBase, error) {
 }
 
 func (s signatureBase) marshal() []byte {
-	var buf bytes.Buffer
+	// calculate size
+	size := 0
+	for i, item := range s.entries {
+		size += len(item.identifier) + len(": ") + len(item.value)
+		if i > 0 {
+			size++
+		}
+	}
+
+	if s.signatureParams != "" {
+		size += len(`"@signature-params": `) + len(s.signatureParams)
+		if len(s.entries) > 0 {
+			size++
+		}
+	}
+
+	if size == 0 {
+		return nil
+	}
+
+	// do the actual marshalling
+	buf := make([]byte, 0, size)
 
 	for i, item := range s.entries {
 		if i > 0 {
-			buf.WriteByte('\n')
+			buf = append(buf, '\n')
 		}
 
-		buf.WriteString(item.identifier)
-		buf.WriteString(": ")
-		buf.WriteString(item.value)
+		buf = append(buf, item.identifier...)
+		buf = append(buf, ':', ' ')
+		buf = append(buf, item.value...)
 	}
 
 	if s.signatureParams != "" {
 		if len(s.entries) > 0 {
-			buf.WriteByte('\n')
+			buf = append(buf, '\n')
 		}
 
-		buf.WriteString(`"@signature-params": `)
-		buf.WriteString(s.signatureParams)
+		buf = append(buf, `"@signature-params": `...)
+		buf = append(buf, s.signatureParams...)
 	}
 
-	return buf.Bytes()
+	return buf
 }
 
 func (s signatureBase) components() map[string]string {
