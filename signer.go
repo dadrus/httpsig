@@ -47,6 +47,8 @@ type Signer interface {
 // after 30 seconds. The alg, keyid, tag, and nonce parameters are omitted.
 // When generating Content-Digest, the signer uses both SHA-256 and SHA-512
 // unless WithContentDigestAlgorithm selects one.
+//
+//nolint:cyclop
 func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 	ps, err := newPayloadSigner(key.Material, key.Algorithm)
 	if err != nil {

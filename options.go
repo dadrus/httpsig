@@ -496,6 +496,7 @@ func (o contentDigestAlgorithmPreferencesOption) applySignatureNegotiationOption
 	opts.opts = append(opts.opts, o)
 }
 
+//nolint:cyclop
 func addParameter(
 	parameters *[]parameterOption,
 	existing []parameterOption,
