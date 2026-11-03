@@ -186,7 +186,7 @@ func canonicalizeQueryParam(msg *Message, params *httpsfv.Params) ([]string, err
 			ErrCanonicalization, ErrInvalidComponentIdentifier)
 	}
 
-	query := msg.URL.Query()
+	query := msg.queryParams()
 	if !query.Has(name) {
 		return nil, fmt.Errorf("%w: expected query parameter '%s' not found", ErrCanonicalization, name)
 	}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -143,6 +144,9 @@ func MessageForResponse(req *http.Request, respHeader http.Header, body []byte, 
 // and verify an HTTP message signature. For a response, request-related
 // fields supply data used by component identifiers with the ;req parameter.
 // Not every field is necessarily covered by the signature.
+// Message data must remain stable after it is prepared for signing or
+// verification, apart from headers added by signing. A Message must not be
+// copied after its first use.
 type Message struct {
 	// Context is passed to key resolution and Accept-Signature nonce generation.
 	Context context.Context //nolint: containedctx
@@ -174,6 +178,18 @@ type Message struct {
 
 	// IsRequest distinguishes requests from responses for canonicalization.
 	IsRequest bool
+
+	queryOnce   sync.Once
+	queryValues url.Values
+}
+
+// queryParams parses the associated request query at most once per Message.
+func (m *Message) queryParams() url.Values {
+	m.queryOnce.Do(func() {
+		m.queryValues = m.URL.Query()
+	})
+
+	return m.queryValues
 }
 
 func (m *Message) addSignature(label string, signature []byte, signatureInput httpsfv.InnerList) (http.Header, error) {
