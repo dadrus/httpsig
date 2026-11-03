@@ -47,7 +47,7 @@ func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
 }
 
 func (si *signatureInput) parameters() SignatureParameters {
-	result := make(SignatureParameters)
+	result := make(SignatureParameters, len(si.value.Params.Names()))
 
 	if si.value.Params == nil {
 		return result
