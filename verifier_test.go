@@ -287,7 +287,10 @@ func TestNewVerifier(t *testing.T) {
 		"parameter rules inherited from global configuration": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithRequiredParameters("nonce"), WithParameter("audience", "service-a")),
+				WithRequiredTag("profile",
+					WithRequiredParameters("nonce"),
+					WithParameter("audience", "service-a"),
+				),
 				WithForbiddenParameters("alg", "keyid"),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -305,7 +308,10 @@ func TestNewVerifier(t *testing.T) {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
 				WithParameter("audience", "service-a"),
-				WithRequiredTag("profile", WithParameter("audience", "service-a"), WithRequiredParameters("audience")),
+				WithRequiredTag("profile",
+					WithParameter("audience", "service-a"),
+					WithRequiredParameters("audience"),
+				),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
 				t.Helper()
@@ -317,7 +323,9 @@ func TestNewVerifier(t *testing.T) {
 		"global and tag-specific parameter conflict": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithRequiredParameters("nonce")),
+				WithRequiredTag("profile",
+					WithRequiredParameters("nonce"),
+				),
 				WithForbiddenParameters("nonce"),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
@@ -330,7 +338,9 @@ func TestNewVerifier(t *testing.T) {
 		"conflicting expected values": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithParameter("audience", "first")),
+				WithRequiredTag("profile",
+					WithParameter("audience", "first"),
+				),
 				WithParameter("audience", "second"),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
@@ -343,7 +353,9 @@ func TestNewVerifier(t *testing.T) {
 		"required tag cannot be forbidden": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithForbiddenParameters("tag")),
+				WithRequiredTag("profile",
+					WithForbiddenParameters("tag"),
+				),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -382,7 +394,9 @@ func TestNewVerifier(t *testing.T) {
 		"invalid parameter name": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithRequiredParameters("not a name")),
+				WithRequiredTag("profile",
+					WithRequiredParameters("not a name"),
+				),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -394,7 +408,9 @@ func TestNewVerifier(t *testing.T) {
 		"unsupported expected standard parameter": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithParameter("alg", "ed25519")),
+				WithRequiredTag("profile",
+					WithParameter("alg", "ed25519"),
+				),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -406,7 +422,9 @@ func TestNewVerifier(t *testing.T) {
 		"invalid expected nonce": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithParameter("nonce", "")),
+				WithRequiredTag("profile",
+					WithParameter("nonce", ""),
+				),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -416,7 +434,7 @@ func TestNewVerifier(t *testing.T) {
 			},
 		},
 		"duplicate negotiation parameter rejected": {
-			resolver: Key{Algorithm: HmacSha256, Material: []byte("secret")},
+			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
 				WithRequiredTag("profile",
 					WithSignatureNegotiation(
@@ -483,17 +501,17 @@ func TestVerifierVerify(t *testing.T) {
 	tkEd25519, ok := key.(ed25519.PublicKey)
 	require.True(t, ok)
 
-	for _, tc := range []struct {
-		uc                string
+	for uc, tc := range map[string]struct {
 		opts              []VerifierOption
 		verifyOpts        []VerifyOption
 		msg               *Message
 		configureResolver func(t *testing.T, kr *KeyResolverMock)
 		assert            func(t *testing.T, err error, results VerificationResult)
 	}{
-		{
-			uc:                "without signature-input header",
-			opts:              []VerifierOption{WithValidateAllSignatures()},
+		"without signature-input header": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
 			assert: func(t *testing.T, err error, _ VerificationResult) {
@@ -504,9 +522,10 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, &NoApplicableSignatureError{})
 			},
 		},
-		{
-			uc:   "malformed signature-input header items definition",
-			opts: []VerifierOption{WithValidateAllSignatures()},
+		"malformed signature-input header items definition": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=(,);created=1618884473;keyid="test"`},
@@ -522,9 +541,10 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "unrecognized character")
 			},
 		},
-		{
-			uc:   "malformed signature-input header parameter",
-			opts: []VerifierOption{WithValidateAllSignatures()},
+		"malformed signature-input header parameter": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid=test`},
@@ -540,9 +560,10 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "keyid")
 			},
 		},
-		{
-			uc:   "without signature header",
-			opts: []VerifierOption{WithValidateAllSignatures()},
+		"without signature header": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid="test"`},
@@ -558,9 +579,10 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "no signature present")
 			},
 		},
-		{
-			uc:   "malformed signature header",
-			opts: []VerifierOption{WithRequiredTag("foo")},
+		"malformed signature header": {
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid="test"`},
@@ -576,9 +598,10 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "format")
 			},
 		},
-		{
-			uc:   "no applicable signature present",
-			opts: []VerifierOption{WithRequiredTag("foo")},
+		"no applicable signature present": {
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid="test"`},
@@ -600,8 +623,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, hdr)
 			},
 		},
-		{
-			uc: "signature base creation error",
+		"signature base creation error": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -623,9 +645,11 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "@status not valid for requests")
 			},
 		},
-		{
-			uc:   "key resolver error",
-			opts: []VerifierOption{WithValidateAllSignatures(), WithExpiresTimestamp(false)},
+		"key resolver error": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithExpiresTimestamp(false),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid="test"`},
@@ -653,9 +677,11 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "test error")
 			},
 		},
-		{
-			uc:   "expired signature rejected before key resolution",
-			opts: []VerifierOption{WithRequiredTag("foo"), WithValidityTolerance(1 * time.Second)},
+		"expired signature rejected before key resolution": {
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+				WithValidityTolerance(1 * time.Second),
+			},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();expires=1618884470;keyid="test";tag="foo"`},
@@ -671,10 +697,11 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "expired")
 			},
 		},
-		{
-			uc: "missing required component rejected before key resolution",
+		"missing required component rejected before key resolution": {
 			opts: []VerifierOption{
-				WithRequiredTag("foo", WithComponents("@method")),
+				WithRequiredTag("foo",
+					WithComponents("@method"),
+				),
 				WithCreatedTimestamp(false),
 				WithExpiresTimestamp(false),
 			},
@@ -694,11 +721,13 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "required extension missing before key resolution",
+		"required extension missing before key resolution": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithRequiredParameters("nonce")),
-				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
+				WithRequiredTag("profile",
+					WithRequiredParameters("nonce"),
+				),
+				WithCreatedTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{Header: http.Header{
 				"Signature-Input": {`sig=();tag="profile"`},
@@ -714,11 +743,13 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "forbidden parameter rejected before key resolution",
+		"forbidden parameter rejected before key resolution": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithForbiddenParameters("keyid", "alg")),
-				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
+				WithRequiredTag("profile",
+					WithForbiddenParameters("keyid", "alg"),
+				),
+				WithCreatedTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{Header: http.Header{
 				"Signature-Input": {`sig=();keyid="key";tag="profile"`},
@@ -733,11 +764,11 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "dynamic parameter expectation checked before key resolution",
+		"dynamic parameter expectation checked before key resolution": {
 			opts: []VerifierOption{
 				WithRequiredTag("profile"),
-				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
+				WithCreatedTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			verifyOpts: []VerifyOption{WithParameter("audience", "expected")},
 			msg: &Message{Header: http.Header{
@@ -753,10 +784,11 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "dynamic expectations cannot override static values",
+		"dynamic expectations cannot override static values": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithParameter("audience", "static")),
+				WithRequiredTag("profile",
+					WithParameter("audience", "static"),
+				),
 			},
 			verifyOpts:        []VerifyOption{WithParameter("audience", "dynamic")},
 			msg:               &Message{Header: make(http.Header)},
@@ -769,10 +801,13 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc:                "dynamic rules cannot forbid required timestamps",
-			opts:              []VerifierOption{WithRequiredTag("profile")},
-			verifyOpts:        []VerifyOption{WithForbiddenParameters("created")},
+		"dynamic rules cannot forbid required timestamps": {
+			opts: []VerifierOption{
+				WithRequiredTag("profile"),
+			},
+			verifyOpts: []VerifyOption{
+				WithForbiddenParameters("created"),
+			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
 			assert: func(t *testing.T, err error, results VerificationResult) {
@@ -783,12 +818,15 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "dynamic audience requested in negotiation",
+		"dynamic audience requested in negotiation": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithSignatureNegotiation()),
+				WithRequiredTag("profile",
+					WithSignatureNegotiation(),
+				),
 			},
-			verifyOpts: []VerifyOption{WithParameter("audience", "service-a")},
+			verifyOpts: []VerifyOption{
+				WithParameter("audience", "service-a"),
+			},
 			msg: &Message{Header: http.Header{
 				"Signature-Input": {`sig=();created=1618884473;expires=1618884600;tag="profile"`},
 				"Signature":       {"sig=:dGVzdA==:"},
@@ -806,11 +844,12 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;tag="profile";audience="service-a"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "static audience requested for missing signature",
+		"static audience requested for missing signature": {
 			opts: []VerifierOption{
 				WithParameter("audience", "service-a"),
-				WithRequiredTag("profile", WithSignatureNegotiation()),
+				WithRequiredTag("profile",
+					WithSignatureNegotiation(),
+				),
 			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
@@ -826,16 +865,19 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;tag="profile";audience="service-a"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "expected nonce overrides negotiation getter",
+		"expected nonce overrides negotiation getter": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithSignatureNegotiation(
-					WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) {
-						return "getter", errors.New("getter must not be called")
-					})),
-				)),
+				WithRequiredTag("profile",
+					WithSignatureNegotiation(
+						WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) {
+							return "getter", errors.New("getter must not be called")
+						})),
+					),
+				),
 			},
-			verifyOpts:        []VerifyOption{WithParameter("nonce", "expected-nonce")},
+			verifyOpts: []VerifyOption{
+				WithParameter("nonce", "expected-nonce"),
+			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
 			assert: func(t *testing.T, err error, results VerificationResult) {
@@ -850,13 +892,18 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;nonce="expected-nonce";tag="profile"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "dynamic expectations projected for all required tags",
+		"dynamic expectations projected for all required tags": {
 			opts: []VerifierOption{
-				WithRequiredTag("first", WithSignatureNegotiation()),
-				WithRequiredTag("second", WithSignatureNegotiation()),
+				WithRequiredTag("first",
+					WithSignatureNegotiation(),
+				),
+				WithRequiredTag("second",
+					WithSignatureNegotiation(),
+				),
 			},
-			verifyOpts:        []VerifyOption{WithParameter("audience", "service-a")},
+			verifyOpts: []VerifyOption{
+				WithParameter("audience", "service-a"),
+			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
 			assert: func(t *testing.T, err error, results VerificationResult) {
@@ -874,12 +921,14 @@ func TestVerifierVerify(t *testing.T) {
 				}, hdr.Values(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "conflicting explicit negotiation parameter is rejected",
+		"conflicting explicit negotiation parameter is rejected": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithParameter("audience", "expected"), WithSignatureNegotiation(
-					WithParameter("audience", "builder"),
-				)),
+				WithRequiredTag("profile",
+					WithParameter("audience", "expected"),
+					WithSignatureNegotiation(
+						WithParameter("audience", "builder"),
+					),
+				),
 			},
 			msg:               &Message{Header: make(http.Header)},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
@@ -891,8 +940,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "signature algorithm mismatch after key resolution",
+		"signature algorithm mismatch after key resolution": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -920,8 +968,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "unsupported signature key",
+		"unsupported signature key": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
 				WithExpiresTimestamp(false),
@@ -954,8 +1001,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "unsupported key")
 			},
 		},
-		{
-			uc: "invalid signature",
+		"invalid signature": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
 				WithExpiresTimestamp(false),
@@ -996,8 +1042,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "invalid signature")
 			},
 		},
-		{
-			uc: "signature parameters negotiation for not present tagged signature",
+		"signature parameters negotiation for not present tagged signature": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithComponents("@method", "content-digest"),
@@ -1029,12 +1074,13 @@ func TestVerifierVerify(t *testing.T) {
 				assert.ElementsMatch(t, hdr.Values("Want-Content-Digest"), []string{"sha-256=1"})
 			},
 		},
-		{
-			uc: "global content-digest requirement overridden for negotiated tag",
+		"global content-digest requirement overridden for negotiated tag": {
 			opts: []VerifierOption{
 				WithComponents("content-digest"),
 				WithSignatureNegotiation(),
-				WithRequiredTag("foo", WithComponents("@method")),
+				WithRequiredTag("foo",
+					WithComponents("@method"),
+				),
 			},
 			msg:               &Message{Header: http.Header{}},
 			configureResolver: func(t *testing.T, _ *KeyResolverMock) { t.Helper() },
@@ -1053,12 +1099,13 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Empty(t, hdr.Values(headerWantContentDigest))
 			},
 		},
-		{
-			uc: "signature negotiation without nonce getter omits nonce",
+		"signature negotiation without nonce getter omits nonce": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithComponents("@method"),
-					WithSignatureNegotiation(WithLabel("foo-sig")),
+					WithSignatureNegotiation(
+						WithLabel("foo-sig"),
+					),
 				),
 			},
 			msg:               &Message{Header: http.Header{}},
@@ -1077,8 +1124,7 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `foo-sig=("@method");created;expires;tag="foo"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "signature parameters negotiation for present signature with missing expires parameters",
+		"signature parameters negotiation for present signature with missing expires parameters": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithSignatureNegotiation(
@@ -1119,8 +1165,7 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `bar=();created;expires;keyid="test-key";alg="rsa-pss-sha512";nonce="abc";tag="foo"`, hdr.Get("Accept-Signature"))
 			},
 		},
-		{
-			uc: "signature parameters negotiation fails because of nonce error",
+		"signature parameters negotiation fails because of nonce error": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
 					WithComponents("@method"),
@@ -1142,8 +1187,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorContains(t, err, "test error")
 			},
 		},
-		{
-			uc: "signature verification fails due to invalid second content digest",
+		"signature verification fails due to invalid second content digest": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1176,9 +1220,8 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, ErrContentDigestMismatch)
 			},
 		},
-		{
+		"B.2.1. minimal signature using rsa-pss-sha512": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-minimal-signature-using-rsa
-			uc: "B.2.1. minimal signature using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1240,9 +1283,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "foo", sig.Metadata)
 			},
 		},
-		{
+		"B.2.2. selective covered components using rsa-pss-sha512": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-selective-covered-component
-			uc: "B.2.2. selective covered components using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1311,9 +1353,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, []string{"foo"}, sig.Metadata)
 			},
 		},
-		{
+		"B.2.3. full coverage using rsa-pss-sha512": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-full-coverage-using-rsa-pss
-			uc: "B.2.3. full coverage using rsa-pss-sha512",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1391,9 +1432,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Nil(t, sig.Metadata)
 			},
 		},
-		{
+		"B.2.4. signing a response using ecdsa-p256-sha256": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-response-using-ec
-			uc: "B.2.4. signing a response using ecdsa-p256-sha256 ",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1461,9 +1501,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, map[string]int{"foo": 1}, sig.Metadata)
 			},
 		},
-		{
+		"B.2.5. signing a request using hmac-sha256": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-request-using-hma
-			uc: "B.2.5. signing a request using hmac-sha256",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1527,9 +1566,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Empty(t, sig.Metadata)
 			},
 		},
-		{
+		"B.2.6. signing a request using ed25519": {
 			// https://www.rfc-editor.org/rfc/rfc9421.html#name-signing-a-request-using-ed2
-			uc: "B.2.6. signing a request using ed25519",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
@@ -1600,8 +1638,7 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Empty(t, sig.Metadata)
 			},
 		},
-		{
-			uc: "invalid untagged signature is ignored",
+		"invalid untagged signature is ignored": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
 				WithExpiresTimestamp(false),
@@ -1650,8 +1687,7 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, map[string]string{"foo": "bar"}, sig.Metadata)
 			},
 		},
-		{
-			uc: "invalid untagged signature fails when validating all",
+		"invalid untagged signature fails when validating all": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithExpiresTimestamp(false),
@@ -1688,8 +1724,7 @@ func TestVerifierVerify(t *testing.T) {
 				require.Empty(t, results)
 			},
 		},
-		{
-			uc: "multiple valid signatures with different keys and metadata",
+		"multiple valid signatures with different keys and metadata": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithExpiresTimestamp(false),
@@ -1792,13 +1827,14 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "ed25519", sig.Metadata)
 			},
 		},
-		{
-			uc: "tag-specific negotiation",
+		"tag-specific negotiation": {
 			opts: []VerifierOption{
-				WithRequiredTag("profile", WithSignatureNegotiation(
-					WithParameter("audience", "service-a"),
-					WithParameter("challenge", Token("example")),
-				)),
+				WithRequiredTag("profile",
+					WithSignatureNegotiation(
+						WithParameter("audience", "service-a"),
+						WithParameter("challenge", Token("example")),
+					),
+				),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1822,10 +1858,11 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;tag="profile";audience="service-a";challenge=example`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "inherited global negotiation",
+		"inherited global negotiation": {
 			opts: []VerifierOption{
-				WithSignatureNegotiation(WithParameter("audience", "service-a")),
+				WithSignatureNegotiation(
+					WithParameter("audience", "service-a"),
+				),
 				WithRequiredTag("profile"),
 			},
 			msg: &Message{
@@ -1851,7 +1888,7 @@ func TestVerifierVerify(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			kr := NewKeyResolverMock(t)
 			tc.configureResolver(t, kr)
 
@@ -1904,8 +1941,13 @@ func TestVerifierVerify(t *testing.T) {
 		inputBytes[0] = 'X' // Neither signer nor verifier may retain this mutable input.
 
 		for _, opts := range [][]VerifyOption{
-			{WithParameter("audience", "service-a")},
-			{WithParameter("audience", "service-a"), WithRequiredParameters("mode")},
+			{
+				WithParameter("audience", "service-a"),
+			},
+			{
+				WithParameter("audience", "service-a"),
+				WithRequiredParameters("mode"),
+			},
 			nil,
 		} {
 			results, err := ver.Verify(msg, opts...)
@@ -1925,7 +1967,11 @@ func TestVerifierVerify(t *testing.T) {
 		require.ErrorIs(t, err, ErrParameter)
 
 		// A Structured-Fields Token is not interchangeable with a String.
-		withString, err := NewVerifier(key, WithRequiredTag("profile", WithParameter("mode", "example")))
+		withString, err := NewVerifier(key,
+			WithRequiredTag("profile",
+				WithParameter("mode", "example"),
+			),
+		)
 		require.NoError(t, err)
 		_, err = withString.Verify(msg)
 		require.ErrorIs(t, err, ErrParameter)
