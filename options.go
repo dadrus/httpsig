@@ -46,7 +46,12 @@ type SignatureNegotiationOption interface {
 // VerifierOption configures signature selection or verification requirements.
 // It can also be used within WithRequiredTag for per-tag requirements.
 type VerifierOption interface {
-	applyVerifierOption(v *verifier, e *expectations, inTag bool) error
+	applyVerifierOption(v *verifier, e *verificationPolicy, inTag bool) error
+}
+
+// VerifyOption adds requirements for a single Verify call.
+type VerifyOption interface {
+	applyVerifyOption(e *verificationPolicy) error
 }
 
 // AcceptSignatureOption configures an AcceptSignatureBuilder.
@@ -65,9 +70,9 @@ func (f signerOptionFunc) applySignerOption(s *signer) error {
 	return f(s)
 }
 
-type verifierOptionFunc func(*verifier, *expectations, bool) error
+type verifierOptionFunc func(*verifier, *verificationPolicy, bool) error
 
-func (f verifierOptionFunc) applyVerifierOption(v *verifier, e *expectations, inTag bool) error {
+func (f verifierOptionFunc) applyVerifierOption(v *verifier, e *verificationPolicy, inTag bool) error {
 	return f(v, e, inTag)
 }
 
@@ -135,10 +140,10 @@ func (o componentsOption) applySignerOption(s *signer) error {
 	return err
 }
 
-func (o componentsOption) applyVerifierOption(_ *verifier, exp *expectations, _ bool) error {
+func (o componentsOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
 	var err error
 
-	exp.identifiers, err = toComponentIdentifiers(o.identifiers)
+	policy.identifiers, err = toComponentIdentifiers(o.identifiers)
 
 	return err
 }
@@ -226,13 +231,15 @@ func WithAlg() SignerOption {
 	})
 }
 
-// WithParameter specifies an extension parameter for signing or requesting a
-// signature, either in the reusable configuration or for a single call.
-// It can also be used in WithSignatureNegotiation. Extension values may be
+// WithParameter specifies an extension parameter for signing, verifying, or
+// requesting a signature, either statically or for a single call. It can also
+// be used in WithSignatureNegotiation. Extension values may be
 // string, Token, bool, int, int64, float64, or []byte. Standard RFC 9421
-// parameter names are reserved, except for a non-empty string nonce on Sign
-// or AcceptSignatureBuilder.Build. Duplicate names are rejected, including
-// duplicates between builder configuration and Build options.
+// parameter names are reserved, except for a non-empty string nonce on Verify,
+// Sign, or AcceptSignatureBuilder.Build. Verification requirements are additive;
+// an invocation cannot override static requirements. Duplicate signing or
+// builder parameters are rejected. Do not use secret expected values: verification
+// compares them before the signature has been authenticated.
 func WithParameter(name string, value any) parameterOption {
 	return parameterOption{name: name, value: value}
 }
@@ -274,6 +281,57 @@ func (o parameterOption) applySignatureNegotiationOption(opts *sigNegotiationOpt
 	opts.opts = append(opts.opts, o)
 }
 
+func (o parameterOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
+	return o.applyVerifyOption(policy)
+}
+
+func (o parameterOption) applyVerifyOption(policy *verificationPolicy) error {
+	return policy.addExpectedParameter(o)
+}
+
+// WithRequiredParameters requires the named signature parameters to be present.
+// It does not check their application-specific semantics.
+func WithRequiredParameters(names ...string) requiredParametersOption {
+	return names
+}
+
+type requiredParametersOption []string
+
+func (o requiredParametersOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
+	return o.applyVerifyOption(policy)
+}
+
+func (o requiredParametersOption) applyVerifyOption(policy *verificationPolicy) error {
+	for _, name := range o {
+		if err := policy.addRequiredParameter(name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WithForbiddenParameters rejects signatures containing any named parameter.
+func WithForbiddenParameters(names ...string) forbiddenParametersOption {
+	return names
+}
+
+type forbiddenParametersOption []string
+
+func (o forbiddenParametersOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
+	return o.applyVerifyOption(policy)
+}
+
+func (o forbiddenParametersOption) applyVerifyOption(policy *verificationPolicy) error {
+	for _, name := range o {
+		if err := policy.addForbiddenParameter(name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (o parameterOption) applyAcceptSignatureBuildOption(opts *acceptSignatureBuildOptions) error {
 	if o.name == string(Nonce) {
 		if opts.nonceSet {
@@ -310,7 +368,7 @@ func validateNonceOption(value any) (string, error) {
 // WithValidityTolerance specifies the allowed clock skew for created and
 // expires timestamp checks.
 func WithValidityTolerance(d time.Duration) VerifierOption {
-	return verifierOptionFunc(func(_ *verifier, e *expectations, _ bool) error {
+	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
 		e.tolerance = d
 
 		return nil
@@ -320,7 +378,7 @@ func WithValidityTolerance(d time.Duration) VerifierOption {
 // WithMaxAge specifies the maximum allowed age of a signature with a
 // created timestamp.
 func WithMaxAge(d time.Duration) VerifierOption {
-	return verifierOptionFunc(func(_ *verifier, e *expectations, _ bool) error {
+	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
 		e.maxAge = d
 
 		return nil
@@ -330,7 +388,7 @@ func WithMaxAge(d time.Duration) VerifierOption {
 // WithRequiredTag specifies a required application-defined tag and its
 // per-tag verifier options. Each non-empty tag may be configured only once.
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
-	return verifierOptionFunc(func(ver *verifier, _ *expectations, f bool) error {
+	return verifierOptionFunc(func(ver *verifier, _ *verificationPolicy, f bool) error {
 		if f {
 			panic("WithRequiredTag cannot be used as option for itself")
 		}
@@ -339,22 +397,22 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 			return fmt.Errorf("%w: required tag must not be empty", ErrParameter)
 		}
 
-		if _, configured := ver.tagExpectations[tag]; configured {
+		if _, configured := ver.tagPolicies[tag]; configured {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)
 		}
 
-		exp := &expectations{
+		policy := &verificationPolicy{
 			tolerance: -1,
 			maxAge:    -1,
 		}
 
 		for _, opt := range opts {
-			if err := opt.applyVerifierOption(ver, exp, true); err != nil {
+			if err := opt.applyVerifierOption(ver, policy, true); err != nil {
 				return err
 			}
 		}
 
-		ver.tagExpectations[tag] = exp
+		ver.tagPolicies[tag] = policy
 
 		return nil
 	})
@@ -363,7 +421,7 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 // WithValidateAllSignatures selects all signatures for verification, rather
 // than only those with required tags.
 func WithValidateAllSignatures() VerifierOption {
-	return verifierOptionFunc(func(v *verifier, _ *expectations, _ bool) error {
+	return verifierOptionFunc(func(v *verifier, _ *verificationPolicy, _ bool) error {
 		v.validateAllSigs = true
 
 		return nil
@@ -379,9 +437,9 @@ func WithCreatedTimestamp(flag bool) createdTimestampOption {
 
 type createdTimestampOption bool
 
-func (o createdTimestampOption) applyVerifierOption(_ *verifier, exp *expectations, _ bool) error {
+func (o createdTimestampOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
 	flag := bool(o)
-	exp.reqCreatedTS = &flag
+	policy.reqCreatedTS = &flag
 
 	return nil
 }
@@ -401,9 +459,9 @@ func WithExpiredTimestamp(flag bool) expiredTimestampOption {
 
 type expiredTimestampOption bool
 
-func (o expiredTimestampOption) applyVerifierOption(_ *verifier, exp *expectations, _ bool) error {
+func (o expiredTimestampOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
 	flag := bool(o)
-	exp.reqExpiresTS = &flag
+	policy.reqExpiresTS = &flag
 
 	return nil
 }
@@ -423,13 +481,13 @@ func WithSignatureNegotiation(opts ...SignatureNegotiationOption) VerifierOption
 		opt.applySignatureNegotiationOption(no)
 	}
 
-	return verifierOptionFunc(func(_ *verifier, exp *expectations, _ bool) error {
+	return verifierOptionFunc(func(_ *verifier, policy *verificationPolicy, _ bool) error {
 		builder, err := NewAcceptSignature(no.opts...)
 		if err != nil {
 			return err
 		}
 
-		exp.asb = builder
+		policy.asb = builder
 
 		return nil
 	})
@@ -514,23 +572,10 @@ func addParameter(
 	option parameterOption,
 	copyBytes bool,
 ) error {
-	switch SignatureParameter(option.name) {
-	case Created, Expires, KeyID, Alg, Nonce, Tag:
-		return fmt.Errorf("%w: %q is a reserved signature parameter", ErrParameter, option.name)
-	}
+	var err error
 
-	value := option.value
-	switch v := value.(type) {
-	case Token:
-		value = httpsfv.Token(v)
-	case int:
-		value = int64(v)
-	case string, bool, int64, float64, []byte, httpsfv.Token:
-	default:
-		return fmt.Errorf("%w: unsupported value type %T for signature parameter %q", ErrParameter, value, option.name)
-	}
-
-	if err := validateParameter(option.name, value); err != nil {
+	option, err = normalizeParameter(option)
+	if err != nil {
 		return err
 	}
 
@@ -547,14 +592,38 @@ func addParameter(
 	}
 
 	if copyBytes {
-		if v, ok := value.([]byte); ok {
-			value = bytes.Clone(v)
+		if v, ok := option.value.([]byte); ok {
+			option.value = bytes.Clone(v)
 		}
 	}
 
-	*parameters = append(*parameters, parameterOption{name: option.name, value: value})
+	*parameters = append(*parameters, option)
 
 	return nil
+}
+
+func normalizeParameter(option parameterOption) (parameterOption, error) {
+	switch SignatureParameter(option.name) {
+	case Created, Expires, KeyID, Alg, Nonce, Tag:
+		return option, fmt.Errorf("%w: %q is a reserved signature parameter", ErrParameter, option.name)
+	}
+
+	switch v := option.value.(type) {
+	case Token:
+		option.value = httpsfv.Token(v)
+	case int:
+		option.value = int64(v)
+	case string, bool, int64, float64, []byte, httpsfv.Token:
+	default:
+		return option, fmt.Errorf("%w: unsupported value type %T for signature parameter %q",
+			ErrParameter, option.value, option.name)
+	}
+
+	if err := validateParameter(option.name, option.value); err != nil {
+		return option, err
+	}
+
+	return option, nil
 }
 
 func validateParameter(name string, value any) error {

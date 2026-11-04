@@ -134,7 +134,7 @@ func TestWithComponentsForVerifier(t *testing.T) {
 	} {
 		t.Run(uc, func(t *testing.T) {
 			v := &verifier{}
-			exp := &expectations{}
+			exp := &verificationPolicy{}
 
 			err := WithComponents(tc.identifiers...).applyVerifierOption(v, exp, false)
 
@@ -143,7 +143,7 @@ func TestWithComponentsForVerifier(t *testing.T) {
 				require.ErrorIs(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
-				assert.Empty(t, v.tagExpectations)
+				assert.Empty(t, v.tagPolicies)
 				require.Len(t, exp.identifiers, len(tc.identifiers))
 
 				for i, id := range exp.identifiers {
@@ -619,12 +619,12 @@ func TestWithValidityTolerance(t *testing.T) {
 	t.Parallel()
 
 	v := &verifier{}
-	exp := &expectations{}
+	exp := &verificationPolicy{}
 
 	err := WithValidityTolerance(1*time.Minute).applyVerifierOption(v, exp, false)
 	require.NoError(t, err)
 
-	assert.Empty(t, v.tagExpectations)
+	assert.Empty(t, v.tagPolicies)
 	assert.Equal(t, 1*time.Minute, exp.tolerance)
 }
 
@@ -632,7 +632,7 @@ func TestWithMaxAge(t *testing.T) {
 	t.Parallel()
 
 	v := &verifier{}
-	exp := &expectations{}
+	exp := &verificationPolicy{}
 
 	err := WithMaxAge(15*time.Minute).applyVerifierOption(v, exp, false)
 	require.NoError(t, err)
@@ -645,10 +645,10 @@ func TestWithRequiredTag(t *testing.T) {
 
 	for uc, tc := range map[string]struct {
 		opts   []VerifierOption
-		assert func(t *testing.T, err error, exp *expectations)
+		assert func(t *testing.T, err error, exp *verificationPolicy)
 	}{
 		"without options": {
-			assert: func(t *testing.T, err error, exp *expectations) {
+			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -661,7 +661,7 @@ func TestWithRequiredTag(t *testing.T) {
 			opts: []VerifierOption{
 				WithComponents("@status"),
 			},
-			assert: func(t *testing.T, err error, exp *expectations) {
+			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -675,7 +675,7 @@ func TestWithRequiredTag(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidityTolerance(5 * time.Minute),
 			},
-			assert: func(t *testing.T, err error, exp *expectations) {
+			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -689,7 +689,7 @@ func TestWithRequiredTag(t *testing.T) {
 				WithComponents("@status"),
 				WithValidityTolerance(5 * time.Minute),
 			},
-			assert: func(t *testing.T, err error, exp *expectations) {
+			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
 
 				require.NoError(t, err)
@@ -703,7 +703,7 @@ func TestWithRequiredTag(t *testing.T) {
 			opts: []VerifierOption{
 				WithComponents("@foo"),
 			},
-			assert: func(t *testing.T, err error, exp *expectations) {
+			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -715,7 +715,7 @@ func TestWithRequiredTag(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
 			},
-			assert: func(t *testing.T, err error, _ *expectations) {
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
 				t.Helper()
 
 				require.Error(t, err)
@@ -724,7 +724,7 @@ func TestWithRequiredTag(t *testing.T) {
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			v := &verifier{tagExpectations: make(map[string]*expectations)}
+			v := &verifier{tagPolicies: make(map[string]*verificationPolicy)}
 
 			recoverIfPanics := func(t *testing.T, f func() error) (err error) {
 				t.Helper()
@@ -748,24 +748,24 @@ func TestWithRequiredTag(t *testing.T) {
 				return WithRequiredTag("test", tc.opts...).applyVerifierOption(v, nil, false)
 			})
 			if err == nil {
-				require.Len(t, v.tagExpectations, 1)
+				require.Len(t, v.tagPolicies, 1)
 			}
 
-			tc.assert(t, err, v.tagExpectations["test"])
+			tc.assert(t, err, v.tagPolicies["test"])
 		})
 	}
 
 	t.Run("empty required tag", func(t *testing.T) {
-		v := &verifier{tagExpectations: make(map[string]*expectations)}
+		v := &verifier{tagPolicies: make(map[string]*verificationPolicy)}
 
 		err := WithRequiredTag("").applyVerifierOption(v, nil, false)
 
 		require.ErrorIs(t, err, ErrParameter)
-		assert.Empty(t, v.tagExpectations)
+		assert.Empty(t, v.tagPolicies)
 	})
 
 	t.Run("with duplicate WithRequiredTag", func(t *testing.T) {
-		v := &verifier{tagExpectations: map[string]*expectations{"foo": {}}}
+		v := &verifier{tagPolicies: map[string]*verificationPolicy{"foo": {}}}
 
 		err := WithRequiredTag("foo", nil).applyVerifierOption(v, nil, false)
 		require.Error(t, err)
@@ -779,7 +779,7 @@ func TestWithValidateAllSignatures(t *testing.T) {
 
 	v := &verifier{}
 
-	err := WithValidateAllSignatures().applyVerifierOption(v, &expectations{}, false)
+	err := WithValidateAllSignatures().applyVerifierOption(v, &verificationPolicy{}, false)
 
 	require.NoError(t, err)
 	assert.True(t, v.validateAllSigs)
@@ -793,7 +793,7 @@ func TestWithCreatedTimestampForVerifier(t *testing.T) {
 		"timestamp optional": false,
 	} {
 		t.Run(uc, func(t *testing.T) {
-			exp := &expectations{}
+			exp := &verificationPolicy{}
 
 			err := WithCreatedTimestamp(required).applyVerifierOption(&verifier{}, exp, false)
 
@@ -830,7 +830,7 @@ func TestWithExpiredTimestampForVerifier(t *testing.T) {
 		"timestamp optional": false,
 	} {
 		t.Run(uc, func(t *testing.T) {
-			exp := &expectations{}
+			exp := &verificationPolicy{}
 
 			err := WithExpiredTimestamp(required).applyVerifierOption(&verifier{}, exp, false)
 
@@ -941,7 +941,7 @@ func TestWithSignatureNegotiation(t *testing.T) {
 	} {
 		t.Run(uc, func(t *testing.T) {
 			v := &verifier{}
-			exp := &expectations{}
+			exp := &verificationPolicy{}
 
 			err := WithSignatureNegotiation(tc.opts...).applyVerifierOption(v, exp, false)
 
