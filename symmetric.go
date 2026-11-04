@@ -1,13 +1,14 @@
 package httpsig
 
 import (
+	"context"
 	"crypto"
 	"crypto/hmac"
 	"crypto/subtle"
 	"fmt"
 )
 
-func newSymmetricSigner(key []byte, kid string, alg SignatureAlgorithm) (*symmetricSigner, error) {
+func newSymmetricSigner(key []byte, alg SignatureAlgorithm) (*symmetricSigner, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -22,27 +23,21 @@ func newSymmetricSigner(key []byte, kid string, alg SignatureAlgorithm) (*symmet
 	}
 
 	return &symmetricSigner{
-		alg:  alg,
 		key:  key,
-		kid:  kid,
 		hash: hash,
 	}, nil
 }
 
 type symmetricSigner struct {
-	alg  SignatureAlgorithm
 	key  []byte
-	kid  string
 	hash crypto.Hash
 }
 
-func (ms *symmetricSigner) keyID() string { return ms.kid }
+func (ms *symmetricSigner) sign(_ context.Context, data []byte) ([]byte, error) {
+	return ms.hmac(data), nil
+}
 
-func (ms *symmetricSigner) algorithm() SignatureAlgorithm { return ms.alg }
-
-func (ms *symmetricSigner) signPayload(data []byte) ([]byte, error) { return ms.hmac(data), nil }
-
-func (ms *symmetricSigner) verifyPayload(data []byte, mac []byte) error {
+func (ms *symmetricSigner) verify(_ context.Context, data []byte, mac []byte) error {
 	if match := subtle.ConstantTimeCompare(mac, ms.hmac(data)); match != 1 {
 		return ErrInvalidSignature
 	}

@@ -21,6 +21,7 @@ linters:
     # deprecated
     - wsl
     - depguard
+    - gomodguard
   settings:
     cyclop:
       max-complexity: 11
@@ -75,6 +76,7 @@ linters:
           - mnd
           - goconst
           - varnamelen
+          - gocyclo
         path: (.+)_test\.go
 
 formatters:

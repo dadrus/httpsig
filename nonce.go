@@ -1,49 +1,17 @@
 package httpsig
 
-import (
-	"context"
-	"crypto/rand"
-	"encoding/base64"
-)
+import "context"
 
-// NonceGetter represents a source of random nonces to go into resulting objects.
+// NonceGetter supplies a nonce for an Accept-Signature request. An empty
+// result omits the nonce parameter. Generating and correlating nonce values
+// is the responsibility of the calling application.
 type NonceGetter interface {
+	// GetNonce returns a nonce or an error for the given context.
 	GetNonce(ctx context.Context) (string, error)
 }
 
+// NonceGetterFunc adapts a function to the NonceGetter interface.
 type NonceGetterFunc func(ctx context.Context) (string, error)
 
+// GetNonce calls the wrapped function.
 func (ng NonceGetterFunc) GetNonce(ctx context.Context) (string, error) { return ng(ctx) }
-
-// NonceChecker is responsible for the verification of the nonce received in a signature,
-// e.g. to prevent replay attacks, or to verify that the nonce is the expected one, like
-// if requested using the Accept-Signature header.
-type NonceChecker interface {
-	CheckNonce(ctx context.Context, nonce NonceValue) error
-}
-
-type NonceValue struct {
-	Present bool
-	Value   string
-}
-
-type NonceCheckerFunc func(ctx context.Context, nonce NonceValue) error
-
-func (f NonceCheckerFunc) CheckNonce(ctx context.Context, nonce NonceValue) error {
-	return f(ctx, nonce)
-}
-
-type noopNonceChecker struct{}
-
-func (n noopNonceChecker) CheckNonce(_ context.Context, _ NonceValue) error { return nil }
-
-type nonceGetter struct{}
-
-func (n nonceGetter) GetNonce(_ context.Context) (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-
-	return base64.URLEncoding.EncodeToString(b), nil
-}

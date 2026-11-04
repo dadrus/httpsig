@@ -8,123 +8,45 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-type AcceptSignatureOption func(*AcceptSignatureBuilder) error
-
-func WithExpectedKey(key Key) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		asb.keyID = key.KeyID
-		asb.keyAlgorithm = key.Algorithm
-
-		return nil
-	}
-}
-
-func WithExpectedNonce(ng NonceGetter) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		if ng != nil {
-			asb.nonceGetter = ng
-		}
-
-		return nil
-	}
-}
-
-func WithExpectedLabel(label string) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		if len(label) != 0 {
-			asb.label = label
-		}
-
-		return nil
-	}
-}
-
-func WithExpectedComponents(identifiers ...string) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		identifiers, err := toComponentIdentifiers(identifiers)
-		if err != nil {
-			return err
-		}
-
-		asb.setIdentifiers(identifiers)
-
-		return nil
-	}
-}
-
-func WithContentDigestAlgorithmPreferences(prefs ...AlgorithmPreference) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		if len(prefs) == 0 {
-			return nil
-		}
-
-		algPrefs := make([]string, len(prefs))
-
-		for i, pref := range prefs {
-			if pref.Algorithm == "" {
-				return fmt.Errorf("%w: digest algorithm preference requires a non-empty algorithm", ErrParameter)
-			}
-
-			algPrefs[i] = pref.String()
-		}
-
-		asb.cdAlgPrefs = algPrefs
-
-		return nil
-	}
-}
-
-func WithExpectedTag(tag string) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		asb.tag = tag
-
-		return nil
-	}
-}
-
-func WithExpectedCreatedTimestamp(flag bool) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		asb.addCreatedTS = flag
-
-		return nil
-	}
-}
-
-func WithExpectedExpiresTimestamp(flag bool) AcceptSignatureOption {
-	return func(asb *AcceptSignatureBuilder) error {
-		asb.addExpiresTS = flag
-
-		return nil
-	}
-}
-
+// AlgorithmPreference associates a Content-Digest algorithm with a numeric
+// preference value for the Want-Content-Digest header.
 type AlgorithmPreference struct {
-	Algorithm  DigestAlgorithm
+	// Algorithm is the desired digest algorithm.
+	Algorithm DigestAlgorithm
+	// Preference is the preference value serialized alongside the algorithm.
 	Preference int
 }
 
+// String formats the preference as "algorithm=preference".
 func (p AlgorithmPreference) String() string {
 	return fmt.Sprintf("%s=%d", p.Algorithm, p.Preference)
 }
 
+// AcceptSignatureBuilder constructs an Accept-Signature request from the
+// configured parameters and component requirements. Use NewAcceptSignature
+// to create a builder with defaults, then call Build to add headers.
 type AcceptSignatureBuilder struct {
-	keyAlgorithm      SignatureAlgorithm
-	keyID             string
-	nonceGetter       NonceGetter
-	label             string
-	identifiers       []*componentIdentifier
-	cdAlgPrefs        []string
-	tag               string
-	addCreatedTS      bool
-	addExpiresTS      bool
-	wantContentDigest bool
+	signatureAlgorithm SignatureAlgorithm
+	keyID              string
+	nonceGetter        NonceGetter
+	label              string
+	identifiers        []*componentIdentifier
+	parameters         []parameterOption
+	cdAlgPrefs         []string
+	tag                string
+	addCreatedTS       bool
+	addExpiresTS       bool
+	wantContentDigest  bool
 }
 
+// NewAcceptSignature creates an AcceptSignatureBuilder for requesting a
+// signature from a peer. By default, it uses label "sig", requests created
+// and expires parameters, and does not request a nonce. If Content-Digest
+// is requested, the default digest preferences are SHA-256 and SHA-512.
 func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder, error) {
 	asb := &AcceptSignatureBuilder{
 		addCreatedTS: true,
 		addExpiresTS: true,
-		nonceGetter:  nonceGetter{},
 		label:        "sig",
 		cdAlgPrefs: []string{
 			AlgorithmPreference{Algorithm: Sha256, Preference: 5}.String(),  //nolint: mnd
@@ -133,7 +55,7 @@ func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder,
 	}
 
 	for _, opt := range opts {
-		if err := opt(asb); err != nil {
+		if err := opt.applyAcceptSignatureOption(asb); err != nil {
 			return nil, err
 		}
 	}
@@ -141,10 +63,35 @@ func NewAcceptSignature(opts ...AcceptSignatureOption) (*AcceptSignatureBuilder,
 	return asb, nil
 }
 
-func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header) error {
-	nonce, err := asb.nonceGetter.GetNonce(ctx)
-	if err != nil {
-		return err
+// Build appends an Accept-Signature header to header using the configured
+// signature requirements. If Content-Digest is requested, it also appends
+// Want-Content-Digest preferences. Additional extension parameters can be
+// supplied with WithParameter. A non-empty nonce may be provided for this
+// call with WithParameter("nonce", value), overriding a configured
+// WithNonceGetter without invoking it. Otherwise, the configured getter is
+// used if present; if neither is provided, no nonce is requested. Options
+// do not modify the builder. The caller must provide a writable, non-nil
+// http.Header.
+func (asb *AcceptSignatureBuilder) Build(
+	ctx context.Context,
+	header http.Header,
+	opts ...AcceptSignatureBuildOption,
+) error {
+	callOptions := acceptSignatureBuildOptions{staticParameters: asb.parameters}
+	for _, opt := range opts {
+		if err := opt.applyAcceptSignatureBuildOption(&callOptions); err != nil {
+			return err
+		}
+	}
+
+	nonce := callOptions.nonce
+	if !callOptions.nonceSet && asb.nonceGetter != nil {
+		var err error
+
+		nonce, err = asb.nonceGetter.GetNonce(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	sigReqs := newSignatureRequirements(
@@ -153,8 +100,16 @@ func (asb *AcceptSignatureBuilder) Build(ctx context.Context, header http.Header
 		asb.tag,
 		nonce,
 		asb.keyID,
-		asb.keyAlgorithm,
+		asb.signatureAlgorithm,
 		asb.identifiers)
+
+	for _, param := range asb.parameters {
+		sigReqs.Params.Add(string(param.name), param.value)
+	}
+
+	for _, param := range callOptions.parameters {
+		sigReqs.Params.Add(string(param.name), param.value)
+	}
 
 	dict := httpsfv.NewDictionary()
 	dict.Add(asb.label, sigReqs.InnerList)

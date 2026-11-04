@@ -40,7 +40,7 @@ func TestNewSymmetricSigner(t *testing.T) {
 		{uc: string(HmacSha512), alg: HmacSha512, key: k512},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			sig, err := newSymmetricSigner(tc.key, "test", tc.alg)
+			sig, err := newSymmetricSigner(tc.key, tc.alg)
 
 			if tc.err != nil {
 				require.Error(t, err)
@@ -48,9 +48,7 @@ func TestNewSymmetricSigner(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
-				assert.Equal(t, "test", sig.keyID())
 				assert.Equal(t, tc.key, sig.key)
-				assert.Equal(t, tc.alg, sig.algorithm())
 			}
 		})
 	}
@@ -86,10 +84,10 @@ func TestSymmetricSignerSignPayload(t *testing.T) {
 		{alg: HmacSha512, key: k512},
 	} {
 		t.Run(string(tc.alg), func(t *testing.T) {
-			sig, err := newSymmetricSigner(tc.key, "test", tc.alg)
+			sig, err := newSymmetricSigner(tc.key, tc.alg)
 			require.NoError(t, err)
 
-			res, err := sig.signPayload(message)
+			res, err := sig.sign(t.Context(), message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
 
@@ -113,16 +111,16 @@ func TestSymmetricSignerVerifyPayload(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(key), n)
 
-	sig, err := newSymmetricSigner(key, "test", HmacSha256)
+	sig, err := newSymmetricSigner(key, HmacSha256)
 	require.NoError(t, err)
 
-	res, err := sig.signPayload(message)
+	res, err := sig.sign(t.Context(), message)
 	require.NoError(t, err)
 
-	err = sig.verifyPayload(message, res)
+	err = sig.verify(t.Context(), message, res)
 	require.NoError(t, err)
 
-	err = sig.verifyPayload([]byte("test"), res)
+	err = sig.verify(t.Context(), []byte("test"), res)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidSignature)
 }

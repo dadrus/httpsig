@@ -47,25 +47,25 @@ func (_m *KeyResolverMock) EXPECT() *KeyResolverMock_Expecter {
 }
 
 // ResolveKey provides a mock function for the type KeyResolverMock
-func (_mock *KeyResolverMock) ResolveKey(ctx context.Context, keyID string) (Key, error) {
-	ret := _mock.Called(ctx, keyID)
+func (_mock *KeyResolverMock) ResolveKey(ctx context.Context, info SignatureInfo) (KeyInfo, error) {
+	ret := _mock.Called(ctx, info)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ResolveKey")
 	}
 
-	var r0 Key
+	var r0 KeyInfo
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (Key, error)); ok {
-		return returnFunc(ctx, keyID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, SignatureInfo) (KeyInfo, error)); ok {
+		return returnFunc(ctx, info)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) Key); ok {
-		r0 = returnFunc(ctx, keyID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, SignatureInfo) KeyInfo); ok {
+		r0 = returnFunc(ctx, info)
 	} else {
-		r0 = ret.Get(0).(Key)
+		r0 = ret.Get(0).(KeyInfo)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, keyID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, SignatureInfo) error); ok {
+		r1 = returnFunc(ctx, info)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -79,20 +79,20 @@ type KeyResolverMock_ResolveKey_Call struct {
 
 // ResolveKey is a helper method to define mock.On call
 //   - ctx context.Context
-//   - keyID string
-func (_e *KeyResolverMock_Expecter) ResolveKey(ctx any, keyID any) *KeyResolverMock_ResolveKey_Call {
-	return &KeyResolverMock_ResolveKey_Call{Call: _e.mock.On("ResolveKey", ctx, keyID)}
+//   - info SignatureInfo
+func (_e *KeyResolverMock_Expecter) ResolveKey(ctx any, info any) *KeyResolverMock_ResolveKey_Call {
+	return &KeyResolverMock_ResolveKey_Call{Call: _e.mock.On("ResolveKey", ctx, info)}
 }
 
-func (_c *KeyResolverMock_ResolveKey_Call) Run(run func(ctx context.Context, keyID string)) *KeyResolverMock_ResolveKey_Call {
+func (_c *KeyResolverMock_ResolveKey_Call) Run(run func(ctx context.Context, info SignatureInfo)) *KeyResolverMock_ResolveKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 SignatureInfo
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(SignatureInfo)
 		}
 		run(
 			arg0,
@@ -102,12 +102,12 @@ func (_c *KeyResolverMock_ResolveKey_Call) Run(run func(ctx context.Context, key
 	return _c
 }
 
-func (_c *KeyResolverMock_ResolveKey_Call) Return(key Key, err error) *KeyResolverMock_ResolveKey_Call {
-	_c.Call.Return(key, err)
+func (_c *KeyResolverMock_ResolveKey_Call) Return(keyInfo KeyInfo, err error) *KeyResolverMock_ResolveKey_Call {
+	_c.Call.Return(keyInfo, err)
 	return _c
 }
 
-func (_c *KeyResolverMock_ResolveKey_Call) RunAndReturn(run func(ctx context.Context, keyID string) (Key, error)) *KeyResolverMock_ResolveKey_Call {
+func (_c *KeyResolverMock_ResolveKey_Call) RunAndReturn(run func(ctx context.Context, info SignatureInfo) (KeyInfo, error)) *KeyResolverMock_ResolveKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

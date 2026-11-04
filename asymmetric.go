@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -8,10 +9,9 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"math/big"
-	"slices"
 )
 
-func newECDSASigner(privateKey *ecdsa.PrivateKey, kid string, alg SignatureAlgorithm) (*ecdsaSigner, error) {
+func newECDSASigner(privateKey *ecdsa.PrivateKey, alg SignatureAlgorithm) (*ecdsaSigner, error) {
 	var (
 		expectedBitSize int
 		hash            crypto.Hash
@@ -42,25 +42,17 @@ func newECDSASigner(privateKey *ecdsa.PrivateKey, kid string, alg SignatureAlgor
 	}
 
 	return &ecdsaSigner{
-		alg:        alg,
 		privateKey: privateKey,
-		kid:        kid,
 		hash:       hash,
 	}, nil
 }
 
 type ecdsaSigner struct {
-	alg        SignatureAlgorithm
 	privateKey *ecdsa.PrivateKey
-	kid        string
 	hash       crypto.Hash
 }
 
-func (ecs *ecdsaSigner) keyID() string { return ecs.kid }
-
-func (ecs *ecdsaSigner) algorithm() SignatureAlgorithm { return ecs.alg }
-
-func (ecs *ecdsaSigner) signPayload(payload []byte) ([]byte, error) {
+func (ecs *ecdsaSigner) sign(_ context.Context, payload []byte) ([]byte, error) {
 	hasher := ecs.hash.New()
 	// According to documentation, Write() on hash never fails
 	_, _ = hasher.Write(payload)
@@ -78,21 +70,15 @@ func (ecs *ecdsaSigner) signPayload(payload []byte) ([]byte, error) {
 		keyBytes++
 	}
 
-	// We serialize the outputs (r and s) into big-endian byte arrays and pad
-	// them with zeros on the left to make sure the sizes work out. Both arrays
-	// must be keyBytes long, and the output must be 2*keyBytes long.
-	rBytes := r.Bytes()
-	rBytesPadded := make([]byte, keyBytes)
-	copy(rBytesPadded[keyBytes-len(rBytes):], rBytes)
+	// Encode r and s as fixed-width, zero-padded, big-endian integers.
+	signature := make([]byte, 2*keyBytes) //nolint:mnd
+	r.FillBytes(signature[:keyBytes])
+	s.FillBytes(signature[keyBytes:])
 
-	sBytes := s.Bytes()
-	sBytesPadded := make([]byte, keyBytes)
-	copy(sBytesPadded[keyBytes-len(sBytes):], sBytes)
-
-	return slices.Concat(rBytesPadded, sBytesPadded), nil
+	return signature, nil
 }
 
-func newRSASigner(privateKey *rsa.PrivateKey, kid string, alg SignatureAlgorithm) (*rsaSigner, error) {
+func newRSASigner(privateKey *rsa.PrivateKey, alg SignatureAlgorithm) (*rsaSigner, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -114,22 +100,16 @@ func newRSASigner(privateKey *rsa.PrivateKey, kid string, alg SignatureAlgorithm
 		alg:        alg,
 		hash:       hash,
 		privateKey: privateKey,
-		kid:        kid,
 	}, nil
 }
 
 type rsaSigner struct {
 	alg        SignatureAlgorithm
 	privateKey *rsa.PrivateKey
-	kid        string
 	hash       crypto.Hash
 }
 
-func (s *rsaSigner) keyID() string { return s.kid }
-
-func (s *rsaSigner) algorithm() SignatureAlgorithm { return s.alg }
-
-func (s *rsaSigner) signPayload(payload []byte) ([]byte, error) {
+func (s *rsaSigner) sign(_ context.Context, payload []byte) ([]byte, error) {
 	var (
 		out []byte
 		err error
@@ -158,7 +138,7 @@ func (s *rsaSigner) signPayload(payload []byte) ([]byte, error) {
 	return out, nil
 }
 
-func newEd25519Signer(privateKey ed25519.PrivateKey, kid string, alg SignatureAlgorithm) (*ed25519Signer, error) {
+func newEd25519Signer(privateKey ed25519.PrivateKey, alg SignatureAlgorithm) (*ed25519Signer, error) {
 	if alg != Ed25519 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
@@ -172,27 +152,19 @@ func newEd25519Signer(privateKey ed25519.PrivateKey, kid string, alg SignatureAl
 	}
 
 	return &ed25519Signer{
-		alg:        alg,
 		privateKey: privateKey,
-		kid:        kid,
 	}, nil
 }
 
 type ed25519Signer struct {
-	alg        SignatureAlgorithm
 	privateKey ed25519.PrivateKey
-	kid        string
 }
 
-func (s *ed25519Signer) keyID() string { return s.kid }
-
-func (s *ed25519Signer) algorithm() SignatureAlgorithm { return s.alg }
-
-func (s *ed25519Signer) signPayload(payload []byte) ([]byte, error) {
+func (s *ed25519Signer) sign(_ context.Context, payload []byte) ([]byte, error) {
 	return ed25519.Sign(s.privateKey, payload), nil
 }
 
-func newECDSAVerifier(publicKey *ecdsa.PublicKey, keyID string, alg SignatureAlgorithm) (*ecdsaVerifier, error) {
+func newECDSAVerifier(publicKey *ecdsa.PublicKey, alg SignatureAlgorithm) (*ecdsaVerifier, error) {
 	var (
 		expectedBitSize int
 		hash            crypto.Hash
@@ -223,25 +195,17 @@ func newECDSAVerifier(publicKey *ecdsa.PublicKey, keyID string, alg SignatureAlg
 	}
 
 	return &ecdsaVerifier{
-		alg:       alg,
 		publicKey: publicKey,
-		kid:       keyID,
 		hash:      hash,
 	}, nil
 }
 
 type ecdsaVerifier struct {
 	publicKey *ecdsa.PublicKey
-	alg       SignatureAlgorithm
-	kid       string
 	hash      crypto.Hash
 }
 
-func (v *ecdsaVerifier) keyID() string { return v.kid }
-
-func (v *ecdsaVerifier) algorithm() SignatureAlgorithm { return v.alg }
-
-func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *ecdsaVerifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	hasher := v.hash.New()
 	// According to documentation, Write() on hash never fails
 	_, _ = hasher.Write(payload)
@@ -269,7 +233,7 @@ func (v *ecdsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	return nil
 }
 
-func newRSAVerifier(publicKey *rsa.PublicKey, kid string, alg SignatureAlgorithm) (*rsaVerifier, error) {
+func newRSAVerifier(publicKey *rsa.PublicKey, alg SignatureAlgorithm) (*rsaVerifier, error) {
 	var hash crypto.Hash
 
 	switch alg {
@@ -291,22 +255,16 @@ func newRSAVerifier(publicKey *rsa.PublicKey, kid string, alg SignatureAlgorithm
 		alg:       alg,
 		hash:      hash,
 		publicKey: publicKey,
-		kid:       kid,
 	}, nil
 }
 
 type rsaVerifier struct {
 	publicKey *rsa.PublicKey
 	alg       SignatureAlgorithm
-	kid       string
 	hash      crypto.Hash
 }
 
-func (v *rsaVerifier) keyID() string { return v.kid }
-
-func (v *rsaVerifier) algorithm() SignatureAlgorithm { return v.alg }
-
-func (v *rsaVerifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *rsaVerifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	hasher := v.hash.New()
 
 	// According to documentation, Write() on hash never fails
@@ -329,7 +287,7 @@ func (v *rsaVerifier) verifyPayload(payload []byte, signature []byte) error {
 	return nil
 }
 
-func newEd25519Verifier(publicKey ed25519.PublicKey, keyID string, alg SignatureAlgorithm) (*ed25519Verifier, error) {
+func newEd25519Verifier(publicKey ed25519.PublicKey, alg SignatureAlgorithm) (*ed25519Verifier, error) {
 	if alg != Ed25519 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
@@ -344,22 +302,14 @@ func newEd25519Verifier(publicKey ed25519.PublicKey, keyID string, alg Signature
 
 	return &ed25519Verifier{
 		publicKey: publicKey,
-		alg:       alg,
-		kid:       keyID,
 	}, nil
 }
 
 type ed25519Verifier struct {
-	alg       SignatureAlgorithm
 	publicKey ed25519.PublicKey
-	kid       string
 }
 
-func (v *ed25519Verifier) keyID() string { return v.kid }
-
-func (v *ed25519Verifier) algorithm() SignatureAlgorithm { return v.alg }
-
-func (v *ed25519Verifier) verifyPayload(payload []byte, signature []byte) error {
+func (v *ed25519Verifier) verify(_ context.Context, payload []byte, signature []byte) error {
 	if ok := ed25519.Verify(v.publicKey, payload, signature); !ok {
 		return ErrInvalidSignature
 	}

@@ -11,6 +11,9 @@ import (
 
 var errSerialization = errors.New("serialization error")
 
+//nolint:gochecknoglobals
+var byteSequenceWhitespace = regexp.MustCompile(`\s+`)
+
 type serializer interface {
 	serialize(v []string) ([]string, error)
 }
@@ -51,7 +54,7 @@ func newSerializer(params *httpsfv.Params, isRequest bool) (serializer, error) {
 	case isSf || isKey:
 		return &strictSerializer{key: key}, nil
 	case isBs:
-		return &byteSequenceSerializer{regex: regexp.MustCompile(`\s+`)}, nil
+		return &byteSequenceSerializer{}, nil
 	default:
 		return &rawSerializer{}, nil
 	}
@@ -63,9 +66,7 @@ func (s *rawSerializer) serialize(v []string) ([]string, error) {
 	return v, nil
 }
 
-type byteSequenceSerializer struct {
-	regex *regexp.Regexp
-}
+type byteSequenceSerializer struct{}
 
 func (s *byteSequenceSerializer) serialize(v []string) ([]string, error) {
 	encoded := make([]string, len(v))
@@ -73,7 +74,7 @@ func (s *byteSequenceSerializer) serialize(v []string) ([]string, error) {
 	for i, sv := range v {
 		values := strings.Split(sv, ",")
 		for j, v := range values {
-			values[j] = s.regex.ReplaceAllString(strings.TrimSpace(v), " ")
+			values[j] = byteSequenceWhitespace.ReplaceAllString(strings.TrimSpace(v), " ")
 		}
 
 		item := httpsfv.NewItem([]byte(strings.Join(values, ", ")))
