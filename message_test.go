@@ -61,6 +61,38 @@ func TestCreateUniqueLabel(t *testing.T) {
 	}
 }
 
+func TestMessageAddSignature(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		signature      string
+		signatureInput string
+	}{
+		"malformed Signature with valid Signature-Input": {
+			signature:      "not a dictionary",
+			signatureInput: "previous=()",
+		},
+		"valid Signature with malformed Signature-Input": {
+			signature:      "previous=:c2ln:",
+			signatureInput: "not a dictionary",
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			header := make(http.Header)
+			header.Set(headerSignature, tc.signature)
+			header.Set(headerSignatureInput, tc.signatureInput)
+			msg := &Message{Header: header}
+			original := header.Clone()
+
+			result, err := msg.addSignature("new", []byte("signature"), httpsfv.InnerList{})
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.Equal(t, original, msg.Header)
+		})
+	}
+}
+
 func TestMessageFromRequest(t *testing.T) {
 	t.Parallel()
 

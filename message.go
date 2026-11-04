@@ -208,6 +208,10 @@ func (m *Message) addSignature(label string, signature []byte, signatureInput ht
 		signatureHeaderDict = httpsfv.NewDictionary()
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
 	if inputHeader := m.Header.Values(headerSignatureInput); len(inputHeader) != 0 {
 		inputHeaderDict, err = httpsfv.UnmarshalDictionary(inputHeader)
 	} else {
