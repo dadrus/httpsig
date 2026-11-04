@@ -170,6 +170,16 @@ func TestNewComponentIdentifier(t *testing.T) {
 		assert func(t *testing.T, ci *componentIdentifier, err error)
 	}{
 		{
+			uc:   "non-string component name",
+			item: httpsfv.NewItem(int64(42)),
+			assert: func(t *testing.T, ci *componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		{
 			uc:   "invalid",
 			item: httpsfv.NewItem("@foo"),
 			assert: func(t *testing.T, _ *componentIdentifier, err error) {
