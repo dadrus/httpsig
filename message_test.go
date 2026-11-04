@@ -65,30 +65,210 @@ func TestMessageAddSignature(t *testing.T) {
 	t.Parallel()
 
 	for uc, tc := range map[string]struct {
-		signature      string
-		signatureInput string
+		label          string
+		message        *Message
+		signatureInput httpsfv.InnerList
+		assert         func(t *testing.T, msg *Message, header http.Header, err error)
 	}{
+		"without existing signatures": {
+			label:   "new",
+			message: &Message{Header: make(http.Header)},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`new=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`new=("@method")`},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
+		"with existing signatures": {
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature:      {`previous=:c2ln:`},
+				headerSignatureInput: {`previous=("@path")`},
+				"X-Test":             {"value"},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`previous=:c2ln:, new=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`previous=("@path"), new=("@method")`},
+					"X-Test":             {"value"},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
+		"with Signature only": {
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature: {`previous=:c2ln:`},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`previous=:c2ln:, new=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`new=("@method")`},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
+		"with Signature-Input only": {
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignatureInput: {`previous=("@path")`},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`new=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`previous=("@path"), new=("@method")`},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
+		"with duplicate label": {
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature:      {`new=:c2ln:`},
+				headerSignatureInput: {`new=("@path")`},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`new=:c2ln:, new1=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`new=("@path"), new1=("@method")`},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
+		"with multiple duplicate labels": {
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature:      {`new=:c2ln:, new1=:c2ln:`},
+				headerSignatureInput: {`new=("@path"), new1=("@query")`},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, http.Header{
+					headerSignature:      {`new=:c2ln:, new1=:c2ln:, new2=:c2lnbmF0dXJl:`},
+					headerSignatureInput: {`new=("@path"), new1=("@query"), new2=("@method")`},
+				}, header)
+				assert.Equal(t, header, msg.Header)
+			},
+		},
 		"malformed Signature with valid Signature-Input": {
-			signature:      "not a dictionary",
-			signatureInput: "previous=()",
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature:      {"not a dictionary"},
+				headerSignatureInput: {"previous=()"},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				assert.Nil(t, header)
+				assert.Equal(t, http.Header{
+					headerSignature:      {"not a dictionary"},
+					headerSignatureInput: {"previous=()"},
+				}, msg.Header)
+			},
 		},
 		"valid Signature with malformed Signature-Input": {
-			signature:      "previous=:c2ln:",
-			signatureInput: "not a dictionary",
+			label: "new",
+			message: &Message{Header: http.Header{
+				headerSignature:      {"previous=:c2ln:"},
+				headerSignatureInput: {"not a dictionary"},
+			}},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				assert.Nil(t, header)
+				assert.Equal(t, http.Header{
+					headerSignature:      {"previous=:c2ln:"},
+					headerSignatureInput: {"not a dictionary"},
+				}, msg.Header)
+			},
+		},
+		"invalid label": {
+			label:   "Invalid",
+			message: &Message{Header: make(http.Header)},
+			signatureInput: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method")},
+				Params: httpsfv.NewParams(),
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				assert.Nil(t, header)
+				assert.Empty(t, msg.Header)
+			},
+		},
+		"invalid signature input": {
+			label:   "new",
+			message: &Message{Header: make(http.Header)},
+			signatureInput: httpsfv.InnerList{
+				Items: []httpsfv.Item{httpsfv.NewItem("@method")},
+			},
+			assert: func(t *testing.T, msg *Message, header http.Header, err error) {
+				t.Helper()
+
+				require.Error(t, err)
+				assert.Nil(t, header)
+				assert.Empty(t, msg.Header)
+			},
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			header := make(http.Header)
-			header.Set(headerSignature, tc.signature)
-			header.Set(headerSignatureInput, tc.signatureInput)
-			msg := &Message{Header: header}
-			original := header.Clone()
+			header, err := tc.message.addSignature(tc.label, []byte("signature"), tc.signatureInput)
 
-			result, err := msg.addSignature("new", []byte("signature"), httpsfv.InnerList{})
-
-			require.Error(t, err)
-			assert.Nil(t, result)
-			assert.Equal(t, original, msg.Header)
+			tc.assert(t, tc.message, header, err)
 		})
 	}
 }
