@@ -35,6 +35,7 @@ type VerifiedSignature struct {
 
 // VerificationResult contains the signatures selected and successfully
 // verified during one call to Verifier.Verify.
+// The order of the signatures is not guaranteed.
 type VerificationResult []VerifiedSignature
 
 // Verifier verifies HTTP message signatures according to its configured
