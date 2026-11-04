@@ -296,8 +296,8 @@ func TestNewVerifier(t *testing.T) {
 				require.NoError(t, err)
 
 				exp := v.tagPolicies["profile"]
-				assert.Equal(t, []string{"nonce"}, exp.requiredParameters)
-				assert.Equal(t, []string{"alg", "keyid"}, exp.forbiddenParameters)
+				assert.Equal(t, []SignatureParameter{Nonce}, exp.requiredParameters)
+				assert.Equal(t, []SignatureParameter{Alg, KeyID}, exp.forbiddenParameters)
 				assert.Equal(t, []parameterOption{{name: "audience", value: "service-a"}}, exp.expectedParameters)
 			},
 		},
@@ -376,7 +376,7 @@ func TestNewVerifier(t *testing.T) {
 				t.Helper()
 
 				require.NoError(t, err)
-				assert.Equal(t, []string{"created"}, v.tagPolicies["profile"].forbiddenParameters)
+				assert.Equal(t, []SignatureParameter{Created}, v.tagPolicies["profile"].forbiddenParameters)
 			},
 		},
 		"invalid parameter name": {

@@ -161,8 +161,8 @@ const (
 	Sha512 DigestAlgorithm = "sha-512"
 )
 
-// SignatureParameter names one of the standard RFC 9421 signature parameters.
-// Additional, profile-specific parameter names can appear in SignatureParameters.
+// SignatureParameter names an RFC 9421 signature parameter or a
+// profile-specific extension parameter.
 type SignatureParameter string
 
 const (
@@ -190,7 +190,49 @@ const (
 // parameter names; values are decoded Structured Fields bare items (for
 // example string, Token, int64, float64, bool, or []byte).
 // Display Strings are exposed as ordinary strings.
-type SignatureParameters map[string]any
+type SignatureParameters map[SignatureParameter]any
+
+// KeyID returns the keyid parameter if present and of the expected type.
+func (p SignatureParameters) KeyID() (string, bool) {
+	value, ok := p[KeyID].(string)
+
+	return value, ok
+}
+
+// Alg returns the alg parameter if present and of the expected type.
+func (p SignatureParameters) Alg() (string, bool) {
+	value, ok := p[Alg].(string)
+
+	return value, ok
+}
+
+// Created returns the created parameter as a Unix timestamp if it has the expected type.
+func (p SignatureParameters) Created() (int64, bool) {
+	value, ok := p[Created].(int64)
+
+	return value, ok
+}
+
+// Expires returns the expires parameter as a Unix timestamp if it has the expected type.
+func (p SignatureParameters) Expires() (int64, bool) {
+	value, ok := p[Expires].(int64)
+
+	return value, ok
+}
+
+// Nonce returns the nonce parameter if present and of the expected type.
+func (p SignatureParameters) Nonce() (string, bool) {
+	value, ok := p[Nonce].(string)
+
+	return value, ok
+}
+
+// Tag returns the tag parameter if present and of the expected type.
+func (p SignatureParameters) Tag() (string, bool) {
+	value, ok := p[Tag].(string)
+
+	return value, ok
+}
 
 // Token represents a Structured Fields token. It is distinct from string so
 // applications can distinguish token values from quoted Structured Fields

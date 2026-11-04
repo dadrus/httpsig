@@ -63,7 +63,7 @@ func (si *signatureInput) parameters() SignatureParameters {
 			value = string(v)
 		}
 
-		result[name] = value
+		result[SignatureParameter(name)] = value
 	}
 
 	return result

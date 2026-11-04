@@ -240,12 +240,12 @@ func WithAlg() SignerOption {
 // an invocation cannot override static requirements. Duplicate signing or
 // builder parameters are rejected. Do not use secret expected values: verification
 // compares them before the signature has been authenticated.
-func WithParameter(name string, value any) parameterOption {
+func WithParameter(name SignatureParameter, value any) parameterOption {
 	return parameterOption{name: name, value: value}
 }
 
 type parameterOption struct {
-	name  string
+	name  SignatureParameter
 	value any
 }
 
@@ -254,7 +254,7 @@ func (o parameterOption) applySignerOption(s *signer) error {
 }
 
 func (o parameterOption) applySignOption(opts *signOptions) error {
-	if o.name == string(Nonce) {
+	if o.name == Nonce {
 		if opts.nonceSet {
 			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
 		}
@@ -291,11 +291,11 @@ func (o parameterOption) applyVerifyOption(policy *verificationPolicy) error {
 
 // WithRequiredParameters requires the named signature parameters to be present.
 // It does not check their application-specific semantics.
-func WithRequiredParameters(names ...string) requiredParametersOption {
+func WithRequiredParameters(names ...SignatureParameter) requiredParametersOption {
 	return names
 }
 
-type requiredParametersOption []string
+type requiredParametersOption []SignatureParameter
 
 func (o requiredParametersOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
 	return o.applyVerifyOption(policy)
@@ -312,11 +312,11 @@ func (o requiredParametersOption) applyVerifyOption(policy *verificationPolicy) 
 }
 
 // WithForbiddenParameters rejects signatures containing any named parameter.
-func WithForbiddenParameters(names ...string) forbiddenParametersOption {
+func WithForbiddenParameters(names ...SignatureParameter) forbiddenParametersOption {
 	return names
 }
 
-type forbiddenParametersOption []string
+type forbiddenParametersOption []SignatureParameter
 
 func (o forbiddenParametersOption) applyVerifierOption(_ *verifier, policy *verificationPolicy, _ bool) error {
 	return o.applyVerifyOption(policy)
@@ -333,7 +333,7 @@ func (o forbiddenParametersOption) applyVerifyOption(policy *verificationPolicy)
 }
 
 func (o parameterOption) applyAcceptSignatureBuildOption(opts *acceptSignatureBuildOptions) error {
-	if o.name == string(Nonce) {
+	if o.name == Nonce {
 		if opts.nonceSet {
 			return fmt.Errorf("%w: duplicate signature parameter %q", ErrParameter, o.name)
 		}
@@ -358,7 +358,7 @@ func validateNonceOption(value any) (string, error) {
 		return "", fmt.Errorf("%w: nonce must be a non-empty string", ErrParameter)
 	}
 
-	if err := validateParameter(string(Nonce), nonce); err != nil {
+	if err := validateParameter(Nonce, nonce); err != nil {
 		return "", err
 	}
 
@@ -603,7 +603,7 @@ func addParameter(
 }
 
 func normalizeParameter(option parameterOption) (parameterOption, error) {
-	switch SignatureParameter(option.name) {
+	switch option.name {
 	case Created, Expires, KeyID, Alg, Nonce, Tag:
 		return option, fmt.Errorf("%w: %q is a reserved signature parameter", ErrParameter, option.name)
 	}
@@ -626,9 +626,9 @@ func normalizeParameter(option parameterOption) (parameterOption, error) {
 	return option, nil
 }
 
-func validateParameter(name string, value any) error {
+func validateParameter(name SignatureParameter, value any) error {
 	validationParams := httpsfv.NewParams()
-	validationParams.Add(name, value)
+	validationParams.Add(string(name), value)
 
 	if _, err := httpsfv.Marshal(httpsfv.Item{Value: true, Params: validationParams}); err != nil {
 		return fmt.Errorf("%w: invalid signature parameter %q: %w", ErrParameter, name, err)

@@ -354,7 +354,7 @@ func TestWithParameterForSigner(t *testing.T) {
 
 				require.NoError(t, err)
 				require.Len(t, s.parameters, 1)
-				assert.Equal(t, "example", s.parameters[0].name)
+				assert.Equal(t, SignatureParameter("example"), s.parameters[0].name)
 				assert.Equal(t, tc.want, s.parameters[0].value)
 			})
 		}
@@ -421,7 +421,7 @@ func TestWithParameterForSign(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, opts.parameters, 1)
-		assert.Equal(t, "extension", opts.parameters[0].name)
+		assert.Equal(t, SignatureParameter("extension"), opts.parameters[0].name)
 		assert.Equal(t, httpsfv.Token("value"), opts.parameters[0].value)
 	})
 
@@ -496,7 +496,7 @@ func TestWithParameterForAcceptSignature(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Len(t, asb.parameters, 1)
-			assert.Equal(t, "example", asb.parameters[0].name)
+			assert.Equal(t, SignatureParameter("example"), asb.parameters[0].name)
 			assert.Equal(t, tc.want, asb.parameters[0].value)
 		})
 	}

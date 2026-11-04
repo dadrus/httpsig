@@ -104,11 +104,11 @@ func (asb *AcceptSignatureBuilder) Build(
 		asb.identifiers)
 
 	for _, param := range asb.parameters {
-		sigReqs.Params.Add(param.name, param.value)
+		sigReqs.Params.Add(string(param.name), param.value)
 	}
 
 	for _, param := range callOptions.parameters {
-		sigReqs.Params.Add(param.name, param.value)
+		sigReqs.Params.Add(string(param.name), param.value)
 	}
 
 	dict := httpsfv.NewDictionary()

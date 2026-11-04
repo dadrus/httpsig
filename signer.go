@@ -179,11 +179,11 @@ func (s *signer) signatureInput(opts signOptions) *signatureInput {
 	}
 
 	for _, param := range s.parameters {
-		params.Add(param.name, param.value)
+		params.Add(string(param.name), param.value)
 	}
 
 	for _, param := range opts.parameters {
-		params.Add(param.name, param.value)
+		params.Add(string(param.name), param.value)
 	}
 
 	return newSignatureInput(s.ids, params)

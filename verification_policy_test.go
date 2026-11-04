@@ -14,8 +14,8 @@ func TestVerificationPolicyClone(t *testing.T) {
 	t.Parallel()
 
 	original := &verificationPolicy{
-		requiredParameters:  []string{"nonce"},
-		forbiddenParameters: []string{"alg"},
+		requiredParameters:  []SignatureParameter{Nonce},
+		forbiddenParameters: []SignatureParameter{Alg},
 		expectedParameters:  []parameterOption{{name: "audience", value: "service-a"}},
 	}
 
@@ -26,8 +26,8 @@ func TestVerificationPolicyClone(t *testing.T) {
 	clone.forbiddenParameters[0] = "keyid"
 	clone.expectedParameters[0] = parameterOption{name: "audience", value: "service-b"}
 
-	assert.Equal(t, []string{"nonce"}, original.requiredParameters)
-	assert.Equal(t, []string{"alg"}, original.forbiddenParameters)
+	assert.Equal(t, []SignatureParameter{Nonce}, original.requiredParameters)
+	assert.Equal(t, []SignatureParameter{Alg}, original.forbiddenParameters)
 	assert.Equal(t, []parameterOption{{name: "audience", value: "service-a"}}, original.expectedParameters)
 }
 
@@ -44,7 +44,7 @@ func TestVerificationPolicyWithOptions(t *testing.T) {
 	effective, err := original.withOptions("profile", []VerifyOption{WithRequiredParameters("nonce")})
 	require.NoError(t, err)
 	require.NotSame(t, original, effective)
-	assert.Equal(t, []string{"nonce"}, effective.requiredParameters)
+	assert.Equal(t, []SignatureParameter{Nonce}, effective.requiredParameters)
 	assert.Empty(t, original.requiredParameters)
 
 	_, err = original.withOptions("profile", []VerifyOption{WithForbiddenParameters("tag")})
@@ -66,8 +66,8 @@ func TestVerificationPolicyInherit(t *testing.T) {
 		reqCreatedTS:        &required,
 		reqExpiresTS:        &required,
 		asb:                 &AcceptSignatureBuilder{label: "sig"},
-		requiredParameters:  []string{"nonce"},
-		forbiddenParameters: []string{"alg"},
+		requiredParameters:  []SignatureParameter{Nonce},
+		forbiddenParameters: []SignatureParameter{Alg},
 		expectedParameters:  []parameterOption{{name: "audience", value: "service-a"}},
 	}
 
@@ -127,10 +127,10 @@ func TestVerificationPolicyInherit(t *testing.T) {
 
 	for uc, local := range map[string]verificationPolicy{
 		"local requirement conflicts with global prohibition": {
-			requiredParameters: []string{"alg"},
+			requiredParameters: []SignatureParameter{Alg},
 		},
 		"local prohibition conflicts with global required parameter": {
-			forbiddenParameters: []string{"nonce"},
+			forbiddenParameters: []SignatureParameter{Nonce},
 		},
 		"local value conflicts with global expectation": {
 			expectedParameters: []parameterOption{{name: "audience", value: "other"}},

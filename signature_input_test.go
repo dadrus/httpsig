@@ -351,9 +351,9 @@ func TestSignatureInputParameters(t *testing.T) {
 				return params
 			}(),
 			want: SignatureParameters{
-				string(Created): int64(1577836800),
-				"foo":           Token("hello"),
-				"bar":           "hello",
+				Created: int64(1577836800),
+				"foo":   Token("hello"),
+				"bar":   "hello",
 			},
 		},
 	} {

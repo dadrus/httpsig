@@ -18,8 +18,8 @@ type verificationPolicy struct {
 	asb                 *AcceptSignatureBuilder
 	reqCreatedTS        *bool
 	reqExpiresTS        *bool
-	requiredParameters  []string
-	forbiddenParameters []string
+	requiredParameters  []SignatureParameter
+	forbiddenParameters []SignatureParameter
 	expectedParameters  []parameterOption
 }
 
@@ -127,7 +127,7 @@ func (e *verificationPolicy) inheritParameters(globalPolicy *verificationPolicy)
 	return nil
 }
 
-func (e *verificationPolicy) addRequiredParameter(name string) error {
+func (e *verificationPolicy) addRequiredParameter(name SignatureParameter) error {
 	if err := validateParameter(name, true); err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (e *verificationPolicy) addRequiredParameter(name string) error {
 	return e.requireParameter(name)
 }
 
-func (e *verificationPolicy) requireParameter(name string) error {
+func (e *verificationPolicy) requireParameter(name SignatureParameter) error {
 	if slices.Contains(e.forbiddenParameters, name) {
 		return fmt.Errorf("%w: required parameter %q is forbidden", ErrParameter, name)
 	}
@@ -147,7 +147,7 @@ func (e *verificationPolicy) requireParameter(name string) error {
 	return nil
 }
 
-func (e *verificationPolicy) addForbiddenParameter(name string) error {
+func (e *verificationPolicy) addForbiddenParameter(name SignatureParameter) error {
 	if err := validateParameter(name, true); err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (e *verificationPolicy) addForbiddenParameter(name string) error {
 	return e.forbidParameter(name)
 }
 
-func (e *verificationPolicy) forbidParameter(name string) error {
+func (e *verificationPolicy) forbidParameter(name SignatureParameter) error {
 	if slices.Contains(e.requiredParameters, name) {
 		return fmt.Errorf("%w: required parameter %q is forbidden", ErrParameter, name)
 	}
@@ -178,7 +178,7 @@ func (e *verificationPolicy) addExpectedParameter(option parameterOption) error 
 		return fmt.Errorf("%w: expected parameter %q is forbidden", ErrParameter, option.name)
 	}
 
-	if option.name == string(Nonce) {
+	if option.name == Nonce {
 		if _, err := validateNonceOption(option.value); err != nil {
 			return err
 		}
@@ -236,9 +236,9 @@ func (e *verificationPolicy) expectParameter(option parameterOption) error {
 
 func (e *verificationPolicy) validateParameters(tag string) error {
 	for _, name := range e.forbiddenParameters {
-		if name == string(Tag) && tag != "" ||
-			name == string(Created) && *e.reqCreatedTS ||
-			name == string(Expires) && *e.reqExpiresTS {
+		if name == Tag && tag != "" ||
+			name == Created && *e.reqCreatedTS ||
+			name == Expires && *e.reqExpiresTS {
 			return fmt.Errorf("%w: required signature parameter %q is forbidden", ErrParameter, name)
 		}
 	}
@@ -293,19 +293,19 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 	}
 
 	for _, name := range e.requiredParameters {
-		if _, present := si.parameter(SignatureParameter(name)); !present {
+		if _, present := si.parameter(name); !present {
 			return fmt.Errorf("%w: required signature parameter %q is missing", ErrParameter, name)
 		}
 	}
 
 	for _, name := range e.forbiddenParameters {
-		if _, present := si.parameter(SignatureParameter(name)); present {
+		if _, present := si.parameter(name); present {
 			return fmt.Errorf("%w: forbidden signature parameter %q is present", ErrParameter, name)
 		}
 	}
 
 	for _, param := range e.expectedParameters {
-		value, present := si.parameter(SignatureParameter(param.name))
+		value, present := si.parameter(param.name)
 		if !present {
 			return fmt.Errorf("%w: expected signature parameter %q is missing", ErrMissingParameter, param.name)
 		}
