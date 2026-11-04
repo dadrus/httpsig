@@ -605,7 +605,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -625,7 +625,7 @@ func TestVerifierVerify(t *testing.T) {
 		},
 		{
 			uc:   "key resolver error",
-			opts: []VerifierOption{WithValidateAllSignatures(), WithExpiredTimestamp(false)},
+			opts: []VerifierOption{WithValidateAllSignatures(), WithExpiresTimestamp(false)},
 			msg: &Message{
 				Header: http.Header{
 					"Signature-Input": []string{`sig=();created=1618884473;keyid="test"`},
@@ -676,7 +676,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("foo", WithComponents("@method")),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -698,7 +698,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "required extension missing before key resolution",
 			opts: []VerifierOption{
 				WithRequiredTag("profile", WithRequiredParameters("nonce")),
-				WithCreatedTimestamp(false), WithExpiredTimestamp(false),
+				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
 			},
 			msg: &Message{Header: http.Header{
 				"Signature-Input": {`sig=();tag="profile"`},
@@ -718,7 +718,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "forbidden parameter rejected before key resolution",
 			opts: []VerifierOption{
 				WithRequiredTag("profile", WithForbiddenParameters("keyid", "alg")),
-				WithCreatedTimestamp(false), WithExpiredTimestamp(false),
+				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
 			},
 			msg: &Message{Header: http.Header{
 				"Signature-Input": {`sig=();keyid="key";tag="profile"`},
@@ -737,7 +737,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "dynamic parameter expectation checked before key resolution",
 			opts: []VerifierOption{
 				WithRequiredTag("profile"),
-				WithCreatedTimestamp(false), WithExpiredTimestamp(false),
+				WithCreatedTimestamp(false), WithExpiresTimestamp(false),
 			},
 			verifyOpts: []VerifyOption{WithParameter("audience", "expected")},
 			msg: &Message{Header: http.Header{
@@ -896,7 +896,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -924,7 +924,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "unsupported signature key",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 				WithCreatedTimestamp(false),
 			},
 			msg: &Message{
@@ -958,7 +958,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid signature",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 				WithCreatedTimestamp(false),
 			},
 			msg: &Message{
@@ -1147,7 +1147,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1182,7 +1182,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1246,7 +1246,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1317,7 +1317,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1397,7 +1397,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:     http.MethodPost,
@@ -1467,7 +1467,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1533,7 +1533,7 @@ func TestVerifierVerify(t *testing.T) {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -1604,7 +1604,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid untagged signature is ignored",
 			opts: []VerifierOption{
 				WithRequiredTag("foo"),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1654,7 +1654,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "invalid untagged signature fails when validating all",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Header: http.Header{
@@ -1692,7 +1692,7 @@ func TestVerifierVerify(t *testing.T) {
 			uc: "multiple valid signatures with different keys and metadata",
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,

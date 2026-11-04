@@ -450,10 +450,10 @@ func (o createdTimestampOption) applyAcceptSignatureOption(asb *AcceptSignatureB
 	return nil
 }
 
-// WithExpiredTimestamp specifies whether the expires parameter is required
+// WithExpiresTimestamp specifies whether the expires parameter is required
 // during verification or requested in Accept-Signature. False makes it
 // optional during verification and omits it from Accept-Signature.
-func WithExpiredTimestamp(flag bool) expiredTimestampOption {
+func WithExpiresTimestamp(flag bool) expiredTimestampOption {
 	return expiredTimestampOption(flag)
 }
 

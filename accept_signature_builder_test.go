@@ -51,7 +51,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 10}),
 				WithTag("bar"),
 				WithCreatedTimestamp(false),
-				WithExpiredTimestamp(false),
+				WithExpiresTimestamp(false),
 				WithParameter("audience", "service-a"),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {

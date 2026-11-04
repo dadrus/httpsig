@@ -822,7 +822,7 @@ func TestWithCreatedTimestampForAcceptSignature(t *testing.T) {
 	}
 }
 
-func TestWithExpiredTimestampForVerifier(t *testing.T) {
+func TestWithExpiresTimestampForVerifier(t *testing.T) {
 	t.Parallel()
 
 	for uc, required := range map[string]bool{
@@ -832,7 +832,7 @@ func TestWithExpiredTimestampForVerifier(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			exp := &verificationPolicy{}
 
-			err := WithExpiredTimestamp(required).applyVerifierOption(&verifier{}, exp, false)
+			err := WithExpiresTimestamp(required).applyVerifierOption(&verifier{}, exp, false)
 
 			require.NoError(t, err)
 			require.NotNil(t, exp.reqExpiresTS)
@@ -841,7 +841,7 @@ func TestWithExpiredTimestampForVerifier(t *testing.T) {
 	}
 }
 
-func TestWithExpiredTimestampForAcceptSignature(t *testing.T) {
+func TestWithExpiresTimestampForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
 	for uc, requested := range map[string]bool{
@@ -851,7 +851,7 @@ func TestWithExpiredTimestampForAcceptSignature(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			asb := &AcceptSignatureBuilder{addExpiresTS: !requested}
 
-			err := WithExpiredTimestamp(requested).applyAcceptSignatureOption(asb)
+			err := WithExpiresTimestamp(requested).applyAcceptSignatureOption(asb)
 
 			require.NoError(t, err)
 			assert.Equal(t, requested, asb.addExpiresTS)
