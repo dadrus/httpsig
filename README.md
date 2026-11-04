@@ -4,28 +4,30 @@
 
 ## Introduction and Scope
 
-`httpsig` is a library that facilitates the signing and verification of HTTP requests in compliance with the [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421.html) standard.
+`httpsig` is a library for signing and verifying HTTP requests and responses according to [RFC 9421 (HTTP Message Signatures)](https://www.rfc-editor.org/rfc/rfc9421.html). It combines reusable signing and verification policies with support for application-specific signature requirements and signature negotiation using `Accept-Signature`.
 
-Its `Message` abstraction allows integration with different HTTP frameworks.
+The `Message` abstraction keeps these capabilities independent of any particular HTTP framework. For API details and option semantics, see the [Go reference](https://pkg.go.dev/github.com/dadrus/httpsig).
 
 ## Usage
 
 ### Standalone Signing and Verification
 
-To sign an HTTP request, first, create a `Signer` instance using your preferred key and signing algorithm:
+The following snippets show two independent flows: signing an outgoing request and verifying a received response. They assume application-provided keys and other values; routine error handling is abbreviated.
+
+To sign a request, configure a `Signer` with the signing key and the HTTP components to protect:
 
 ```go
-// Create a signer.
-signer, err := httpsig.NewSigner( 
+// Configure the signing policy.
+signer, err := httpsig.NewSigner(
     // specify a key
-    httpsig.Key{Material: privKey, Algorithm: httpsig.EcdsaP256Sha256}, 
+    httpsig.Key{Material: privKey, Algorithm: httpsig.EcdsaP256Sha256},
     // the keyid parameter for the above key
     httpsig.WithKeyID("key1"),
     // specify the required options 
     // duration for which the signature should be valid
-    httpsig.WithTTL(5 * time.Second), 
+    httpsig.WithTTL(5 * time.Second),
     // which components should be protected by a signature 
-    httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"), 
+    httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
     // a tag for your specific application
     httpsig.WithTag("myapp"),
 )
@@ -34,20 +36,24 @@ signer, err := httpsig.NewSigner(
 // Create a request
 req, err := http.NewRequestWithContext(context.Background(), "GET", "https://some-url.com", nil)
 // error handling goes here
+req.Header.Set("X-My-Fancy-Header", "example-value")
+
+nonce := ... // generate a nonce
 
 // Sign the request
 header, err := signer.Sign(
-    httpsig.MessageFromRequest(req), 
+    httpsig.MessageFromRequest(req),
     // add a nonce if required
-    httpsig.WithParameter("nonce", someNonce)
+    httpsig.WithParameter(httpsig.Nonce, nonce),
 )
 // error handling goes here
 
-// Add the signature to the request
+// MessageFromRequest clones the headers; use the headers returned by Sign.
 req.Header = header
+// send the request
 ```
 
-To verify a response, create a `Verifier` using your preferred key and signing algorithm:
+To verify a response, create a `Verifier` with a `KeyResolver` that supplies trusted verification keys (see [Key Resolution](#key-resolution)). `WithValidateAllSignatures` checks every signature present in the message; use `WithRequiredTag` instead when your protocol expects particular signed tags.
 
 ```go
 // Receive a response from the server
@@ -56,7 +62,7 @@ resp, err := client.Post("https://some-url.com", "application/json", &buf)
 
 // Create a verifier
 verifier, err := httpsig.NewVerifier(
-    // specify a key resolver to resolve the key used by the client
+    // specify a key resolver to resolve the key
     keyResolver,
     // specify the required options
     // which response components are expected to be protected
@@ -79,9 +85,9 @@ verified, err := verifier.Verify(httpsig.MessageFromResponse(resp))
 
 ```
 
-Once `Verify` succeeds, the application can inspect the `verified` object and perform its own policies, like e.g., the nonce correlation and replay checks.
+Once `Verify` succeeds, your application can inspect the `verified` object and enforce protocol-specific rules, such as nonce correlation, replay protection, and authorization.
 
-If you need to validate a signature created by a specific application (identified by a tag), use the `WithRequiredTag` option when creating the verifier. This option allows you to specify a tag along with the same options as the `NewVerifier` function. Here’s an example:
+If a protocol requires a signature with a particular `tag`, use `WithRequiredTag`. Unlike `WithValidateAllSignatures`, tag-based verification selects signatures carrying the required tag; unrelated signatures are not verified unless all-signature verification is also enabled. For example:
 
 ```go
 verifier, err := httpsig.NewVerifier(
@@ -105,21 +111,20 @@ verified, err := verifier.Verify(msg)
 // error handling goes here
 ```
 
-Global verifier options act as defaults for all required tags. Explicit tag-specific options take precedence (for example, a tag's `WithComponents` replaces the global component list), while required, forbidden, and expected signature parameters are additive. Automatic signature negotiation reflects the effective requirements for each tag.
+Global verifier options act as defaults for required tags. Tag-specific options take precedence (for example, `WithComponents` replaces the global component list), while required, forbidden, and expected signature-parameter constraints are additive. Automatic signature negotiation uses these effective per-tag requirements.
 
-While the examples demonstrate signing a request and verifying a response, you can also verify requests and sign responses. Both the `Verifier.Verify()` and `Signer.Sign()` methods require a `Message` object, which can be created for requests and responses on both client and server sides using the following functions:
+The same APIs also verify incoming requests and sign outgoing responses. Both `Signer.Sign` and `Verifier.Verify` operate on a `Message`, created for the corresponding HTTP direction:
 
-* `MessageFromRequest` - creates a `Message` from an `http.Request`. Can be used for outbound (client-side) and inbound (server-side) requests.
-* `MessageFromResponse` - creates a `Message` from an `http.Response`. Can be used for inbound (client-side) responses from a server.
-* `MessageForResponse` - creates a Message from an outbound (server-side) response.
+* `MessageFromRequest` — outbound client requests or inbound server requests.
+* `MessageFromResponse` — responses received by clients.
+* `MessageForResponse` — responses produced by servers.
 
 For middleware integration, see [HTTP Frameworks](#http-frameworks).
 
-Both the `Signer` and `Verifier` respect the `"content-digest"` component identifier as highlighted in the [Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#name-message-content) of the RFC. This is handled as follows:
+To protect a message body, include `"content-digest"` among the covered components (see [RFC 9421's discussion of message content](https://www.rfc-editor.org/rfc/rfc9421.html#name-message-content)):
 
-* On the `Signer` side, if `"content-digest"` is configured to be included via the `WithComponents` option and the `WithContentDigestAlgorithm` option is not used, the implementation will calculate a message digest over the body using the `sha-256` and `sha-512` algorithms (the only supported algorithms according to [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)). It will then create or replace the `"Content-Digest"` header with the calculated values in addition to the signature-related headers. If the `WithContentDigestAlgorithm` option is used, the message digest will be calculated using the specified algorithm and the `"Content-Digest"` header will be created or replaced with that value.
-
-* On the `Verifier` side, verification of the corresponding hash values is done by default with no additional configuration required. If the `"Signature-Input"` header value contains a `"content-digest"` component, the implementation expects the `"Content-Digest"` header to be present and uses the supplied algorithm names and values to calculate the digest over the body and compare these values to the received ones. If the `"Content-Digest"` header is missing, references unsupported hash algorithms (only `sha-256` and `sha-512` are supported), or there is a mismatch between the calculated and provided values, the message verification will fail with an error.
+* **Signing:** The `Signer` calculates the digest and creates or replaces `Content-Digest` before signing. By default, it uses both `sha-256` and `sha-512` (as defined in [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530.html)); `WithContentDigestAlgorithm` selects a single algorithm.
+* **Verification:** If the signature covers `content-digest`, the `Verifier` also checks the digest against the body. Verification fails if the header is missing, no supported digest is present, or any supported digest mismatches. Only `sha-256` and `sha-512` are checked.
 
 > [!IMPORTANT]
 > Signing or verifying `"content-digest"` requires reading the message body. Since request and response bodies may be attacker-controlled input, callers are responsible for enforcing appropriate body size limits before passing messages to this library.
@@ -156,32 +161,23 @@ After `Verify` succeeds, `VerifiedSignature` provides the verified signature par
 
 ### Signature Negotiation
 
-The library not only supports signing and verifying HTTP messages but also facilitates signature negotiation, as defined in the [RFC 9421 HTTP Message Signatures - Requesting Signatures](https://www.rfc-editor.org/rfc/rfc9421.html#name-requesting-signatures), by utilizing the `"Accept-Signature"` header.
+Signature negotiation uses the `Accept-Signature` header defined in [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421.html#name-requesting-signatures). A client can explicitly request a signed response; a server can derive a request for missing client signatures from its verification policy.
 
-> [!NOTE]  
-> While [Chapter 5.2 - Processing an Accept-Signature](https://www.rfc-editor.org/rfc/rfc9421.html#name-processing-an-accept-signat) of the RFC mandates that 
-> 
-> > ... a target message MUST have the same label ...
-> 
-> this requirement conflicts with [Chapter 7.2.5 - Signature Labels](https://www.rfc-editor.org/rfc/rfc9421.html#name-signature-labels), which clearly states:
-> 
-> > An intermediary is allowed to relabel an existing signature when processing the message.
-> > Therefore, applications **should not** rely on specific labels being present, and applications **should not** put semantic meaning on the labels themselves. Instead, additional signature parameters can be used to convey whatever additional meaning is required to be attached to, and covered by, the signature. In particular, the `tag` parameter can be used to define an application-specific value.
-> 
-> As a result, the current implementation does not enforce label consistency, even though you can specify them. The only reliable method to ensure effective signature negotiation is by utilizing the `tag` parameter, as also recommended in the statement above.
+> [!NOTE]
+> [RFC 9421 §5.2](https://www.rfc-editor.org/rfc/rfc9421.html#name-processing-an-accept-signat) requires a negotiated signature to use the requested label, but [§7.2.5](https://www.rfc-editor.org/rfc/rfc9421.html#name-signature-labels) permits intermediaries to relabel signatures and warns against assigning labels application semantics. `httpsig` therefore does not enforce label consistency. Use the signed `tag` parameter to identify application-specific signatures instead.
 
 #### Requesting Signatures on the Client-Side from the Server
 
-On the client side, you can request the server to sign the response by using the `AcceptSignatureBuilder`. This builder can be created with the `NewAcceptSignature` function, which accepts several options to specify parameters and components that you want the server to include in the response. Here’s an example:
+Use `AcceptSignatureBuilder` when a client needs to request a signed response. It constructs the `Accept-Signature` header independently of any verifier policy, so the client can specify the components and parameters it expects the server to sign:
 
 ```go
 // create a builder (all options are optional)
 builder, err := httpsig.NewAcceptSignature(
-    // request a key ID and signing algorithm
+    // request a key identifier and signing algorithm
     httpsig.WithKeyID("foo"),
     // specify which signature algorithm the peer should use
     httpsig.WithSignatureAlgorithm(httpsig.EcdsaP256Sha256),
-    // specify which label should the server use when creating the response 
+    // request the label and covered components
     httpsig.WithLabel("bar"),
     // specify which components should be covered by the signature 
     httpsig.WithComponents("@status", "content-digest;req", "content-digest"),
@@ -203,11 +199,20 @@ err = builder.Build(req.Context(), req.Header, httpsig.WithParameter("nonce", no
 // error handling goes here
 ```
 
-When the above code executes, it will add an `"Accept-Signature"` header to the request with a value like: `bar=("@status", "content-digest";req, "content-digest");keyid="foo";alg="ecdsa-p256-sha256";nonce="...";tag="awesome-app";created;expires`.
+This adds an `Accept-Signature` header with a value such as:
+
+```http
+Accept-Signature: bar=("@status" "content-digest";req "content-digest");created;expires;keyid="foo";alg="ecdsa-p256-sha256";nonce="...";tag="awesome-app"
+Want-Content-Digest: sha-256=2
+```
+
+The `Want-Content-Digest` header is also added because the requested signature covers `content-digest`.
 
 #### Requesting Signatures on the Server-Side from the Client
 
-Signature negotiation on the server side works differently from the client-side. Instead of using the `AcceptSignatureBuilder`, you specify the corresponding options when creating the `Verifier`. This ensures that there are no discrepancies between what the `Verifier` expects and what is included in the `"Accept-Signature"` response header if an expected signature is not present or required parameters/components are missing. Here’s an example, building on the earlier `Verifier` creation example:
+On the server side, the `Verifier` can derive `Accept-Signature` requirements from its configured policy. This avoids defining component and parameter requirements separately for verification and negotiation. If a required signature, component, or parameter is missing, `Verify` returns an error wrapping `NoApplicableSignatureError`; use `errors.As` to retrieve it and call `Negotiate` to add the prepared headers to the response. An invalid cryptographic signature is still a verification failure, not a negotiation request.
+
+For example, extending the earlier tag-based verifier:
 
 ```go
 verifier, err := httpsig.NewVerifier(
@@ -310,10 +315,10 @@ signer, err := httpsig.NewSigner(
 
 req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
 
-// Recipient
+// Recipient: resolve the covered Signature-Agent member dynamically.
 verifier, err := httpsig.NewVerifier(webBotKeyResolver,
     httpsig.WithRequiredTag("web-bot-auth",
-        httpsig.WithComponents("@authority"),
+        httpsig.WithComponents("@authority", `signature-agent;key="sig1"`),
         httpsig.WithRequiredParameters(httpsig.KeyID),
     ),
 )
@@ -321,7 +326,7 @@ verifier, err := httpsig.NewVerifier(webBotKeyResolver,
 verified, err := verifier.Verify(httpsig.MessageFromRequest(req))
 ```
 
-`webBotKeyResolver` resolves keys from `Signature-Agent` and validates their thumbprints. 
+`webBotKeyResolver` implementation needs to resolve the signing key using the `Signature-Agent` member covered by the signature.
 
 ### AAuth
 
@@ -380,7 +385,7 @@ verifier, err := httpsig.NewVerifier(tokenBoundKeyResolver,
 _, err = verifier.Verify(httpsig.MessageFromRequest(req))
 ```
 
-The resource server validates the access token, supplies its bound key through `KeyResolver`, and checks nonce reuse. For requests with bodies, also cover `content-digest`.
+The resource server validates the access token, supplies its bound key through `KeyResolver`, and checks nonce reuse. For requests with bodies, also cover `content-digest`. When verifying `@target-uri` on incoming requests, use the externally visible absolute URL, reconstructed from trusted server or proxy configuration.
 
 ## HTTP Frameworks
 
@@ -390,12 +395,15 @@ The examples below verify incoming requests. The same signing, verification, and
 
 ```go
 http.Handle("/api", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    // Retain Verify's result if a principal is needed for the next handler.
-    if _, err := verifier.Verify(httpsig.MessageFromRequest(r)); err != nil {
+    result, err := verifier.Verify(httpsig.MessageFromRequest(r))
+    if err != nil {
         http.Error(w, "Unauthorized", http.StatusUnauthorized)
 
         return
     }
+
+    // establish a principal from the result object
+    // and propagate it downstream
 
     handler.ServeHTTP(w, r)
 }))
@@ -405,12 +413,15 @@ http.Handle("/api", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request
 
 ```go
 router.Use(func(c *gin.Context) {
-    // Retain Verify's result if a principal is needed downstream.
-    if _, err := verifier.Verify(httpsig.MessageFromRequest(c.Request)); err != nil {
+    result, err := verifier.Verify(httpsig.MessageFromRequest(c.Request))
+    if err != nil {
         c.AbortWithStatus(http.StatusUnauthorized)
 
         return
     }
+
+    // establish a principal from the result object
+    // and propagate it downstream
 
     c.Next()
 })
@@ -420,15 +431,37 @@ router.Use(func(c *gin.Context) {
 
 ```go
 app.Use(func(c fiber.Ctx) error {
-    req, err := adaptor.ConvertRequest(c, true)
+    targetURL, err := url.Parse(c.FullURL())
     if err != nil {
         return err
     }
 
-    // Retain Verify's result if a principal is needed downstream.
-    if _, err := verifier.Verify(httpsig.MessageFromRequest(req)); err != nil {
+    headers := make(http.Header)
+    for name, values := range c.GetReqHeaders() {
+        for _, value := range values {
+            headers.Add(name, value)
+        }
+    }
+
+    msg := &httpsig.Message{
+        Context:   c.Context(),
+        Method:    c.Method(),
+        Authority: c.Host(),
+        URL:       targetURL,
+        Header:    headers,
+        Body: func() (io.ReadCloser, error) {
+            return io.NopCloser(bytes.NewReader(c.BodyRaw())), nil
+        },
+        IsRequest: true,
+    }
+
+    result, err := verifier.Verify(msg)
+    if err != nil {
         return c.SendStatus(fiber.StatusUnauthorized)
     }
+
+    // establish a principal from the result object
+    // and propagate it downstream
 
     return c.Next()
 })
@@ -437,9 +470,8 @@ app.Use(func(c fiber.Ctx) error {
 ## Security Considerations
 
 * **Coverage:** Require the components your application relies on. For messages with bodies, sign and verify `content-digest` when body integrity matters.
-* **Key trust:** `KeyResolver` receives unverified message data. Select and validate keys according to the application protocol; never treat a reported key ID as proof of identity.
-* **Replay:** Enforce the required freshness and nonce checks after successful signature verification.
+* **Key trust:** `KeyResolver` receives unverified message data. Select and validate keys according to your application protocol.
+* **Replay:** Enforce the required nonce checks after successful signature verification.
 * **Multiple signatures:** Labels are not signed, and `VerificationResult` has no defined order. Choose the required tags or validate all signatures as appropriate.
-* **HTTP intermediaries:** Proxies can rewrite covered components. Apply the body-size limits described above before hashing untrusted content.
 
 See [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#section-7).
