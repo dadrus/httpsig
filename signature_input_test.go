@@ -327,6 +327,42 @@ func TestValidateSignatureInputParameters(t *testing.T) {
 	}
 }
 
+func TestSignatureInputParameters(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		params *httpsfv.Params
+		want   SignatureParameters
+	}{
+		"nil parameters": {
+			want: SignatureParameters{},
+		},
+		"empty parameters": {
+			params: httpsfv.NewParams(),
+			want:   SignatureParameters{},
+		},
+		"with parameters": {
+			params: func() *httpsfv.Params {
+				params := httpsfv.NewParams()
+				params.Add(string(Created), int64(1577836800))
+				params.Add("example", httpsfv.Token("hello"))
+
+				return params
+			}(),
+			want: SignatureParameters{
+				string(Created): int64(1577836800),
+				"example":       Token("hello"),
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			input := &signatureInput{value: httpsfv.InnerList{Params: tc.params}}
+
+			assert.Equal(t, tc.want, input.parameters())
+		})
+	}
+}
+
 func TestSignatureInputParameter(t *testing.T) {
 	t.Parallel()
 
