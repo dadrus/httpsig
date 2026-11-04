@@ -341,17 +341,19 @@ func TestSignatureInputParameters(t *testing.T) {
 			params: httpsfv.NewParams(),
 			want:   SignatureParameters{},
 		},
-		"with parameters": {
+		"with multiple parameters": {
 			params: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add(string(Created), int64(1577836800))
-				params.Add("example", httpsfv.Token("hello"))
+				params.Add("foo", httpsfv.Token("hello"))
+				params.Add("bar", httpsfv.DisplayString("hello"))
 
 				return params
 			}(),
 			want: SignatureParameters{
 				string(Created): int64(1577836800),
-				"example":       Token("hello"),
+				"foo":           Token("hello"),
+				"bar":           "hello",
 			},
 		},
 	} {
