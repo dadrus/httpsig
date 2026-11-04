@@ -13,13 +13,11 @@ import (
 func TestNewAcceptedSignature(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		opts   []AcceptSignatureOption
 		assert func(t *testing.T, err error, asb *AcceptSignatureBuilder)
 	}{
-		{
-			uc: "no options provided",
+		"no options provided": {
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
 
@@ -40,8 +38,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				})
 			},
 		},
-		{
-			uc: "all possible options provided",
+		"all possible options provided": {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
@@ -75,8 +72,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				})
 			},
 		},
-		{
-			uc: "invalid extension parameter",
+		"invalid extension parameter": {
 			opts: []AcceptSignatureOption{
 				WithParameter("keyid", "reserved"),
 			},
@@ -87,8 +83,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				assert.Nil(t, asb)
 			},
 		},
-		{
-			uc: "option raises error",
+		"option raises error": {
 			opts: []AcceptSignatureOption{
 				WithComponents("@foo"),
 			},
@@ -101,7 +96,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			builder, err := NewAcceptSignature(tc.opts...)
 
 			tc.assert(t, err, builder)
@@ -112,31 +107,29 @@ func TestNewAcceptedSignature(t *testing.T) {
 func TestAcceptSignatureBuilderBuild(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc        string
+	for uc, tc := range map[string]struct {
 		opts      []AcceptSignatureOption
 		buildOpts []AcceptSignatureBuildOption
 		assert    func(t *testing.T, err error, hdr http.Header)
 	}{
-		{
-			uc: "no nonce by default",
+		"no nonce by default": {
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.NoError(t, err)
 				assert.Equal(t, `sig=();created;expires`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc:        "explicit nonce at Build",
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("nonce", "request-nonce")},
+		"explicit nonce at Build": {
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("nonce", "request-nonce"),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.NoError(t, err)
 				assert.Equal(t, `sig=();created;expires;nonce="request-nonce"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "explicit nonce overrides getter",
+		"explicit nonce overrides getter": {
 			opts: []AcceptSignatureOption{
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) {
 					return "", errors.New("getter must not be called")
@@ -149,8 +142,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;nonce="requested"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "empty nonce returned by getter is omitted",
+		"empty nonce returned by getter is omitted": {
 			opts: []AcceptSignatureOption{
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "", nil })),
 			},
@@ -160,8 +152,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc:        "non-string nonce in Build",
+		"non-string nonce in Build": {
 			buildOpts: []AcceptSignatureBuildOption{WithParameter("nonce", Token("wrong-type"))},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
@@ -169,26 +160,27 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc:        "empty nonce in Build",
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("nonce", "")},
+		"empty nonce in Build": {
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("nonce", ""),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.ErrorIs(t, err, ErrParameter)
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc:        "invalid structured field string for nonce",
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("nonce", "bad\nvalue")},
+		"invalid structured field string for nonce": {
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("nonce", "bad\nvalue"),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.ErrorIs(t, err, ErrParameter)
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc: "duplicate nonce in Build",
+		"duplicate nonce in Build": {
 			buildOpts: []AcceptSignatureBuildOption{
 				WithParameter("nonce", "first"),
 				WithParameter("nonce", "second"),
@@ -199,17 +191,17 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc:        "additional extension at Build",
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("other", "value")},
+		"additional extension at Build": {
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("other", "value"),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.NoError(t, err)
 				assert.Equal(t, `sig=();created;expires;other="value"`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "static and dynamic extensions",
+		"static and dynamic extensions": {
 			opts: []AcceptSignatureOption{
 				WithParameter("audience", "service-a"),
 				WithParameter("flag", true),
@@ -221,8 +213,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;audience="service-a";flag;challenge=example`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc: "extension types",
+		"extension types": {
 			opts: []AcceptSignatureOption{
 				WithParameter("integer", 42),
 				WithParameter("decimal", 1.5),
@@ -234,18 +225,20 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Equal(t, `sig=();created;expires;integer=42;decimal=1.5;bytes=:aGVsbG8=:`, hdr.Get(headerAcceptSignature))
 			},
 		},
-		{
-			uc:        "conflicting static and dynamic extension",
-			opts:      []AcceptSignatureOption{WithParameter("audience", "static")},
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("audience", "dynamic")},
+		"conflicting static and dynamic extension": {
+			opts: []AcceptSignatureOption{
+				WithParameter("audience", "static"),
+			},
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("audience", "dynamic"),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.ErrorIs(t, err, ErrParameter)
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc: "duplicate extension at Build",
+		"duplicate extension at Build": {
 			buildOpts: []AcceptSignatureBuildOption{
 				WithParameter("audience", "first"),
 				WithParameter("audience", "second"),
@@ -256,17 +249,17 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc:        "invalid extension at Build",
-			buildOpts: []AcceptSignatureBuildOption{WithParameter("other", "bad\nvalue")},
+		"invalid extension at Build": {
+			buildOpts: []AcceptSignatureBuildOption{
+				WithParameter("other", "bad\nvalue"),
+			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
 				require.ErrorIs(t, err, ErrParameter)
 				assert.Empty(t, hdr)
 			},
 		},
-		{
-			uc: "failing getting the nonce",
+		"failing getting the nonce": {
 			opts: []AcceptSignatureOption{
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) {
 					return "", errors.New("test error")
@@ -279,8 +272,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				require.Contains(t, err.Error(), "test error")
 			},
 		},
-		{
-			uc: "Accept-Signature only is added",
+		"Accept-Signature only is added": {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
@@ -301,8 +293,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Empty(t, hdr.Values(headerWantContentDigest))
 			},
 		},
-		{
-			uc: "Accept-Signature and Want-Content-Digest headers are added with default algorithms",
+		"Accept-Signature and Want-Content-Digest headers are added with default algorithms": {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
@@ -325,8 +316,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.ElementsMatch(t, values, []string{"sha-256=5", "sha-512=10"})
 			},
 		},
-		{
-			uc: "Accept-Signature and Want-Content-Digest headers are added with supplied algorithms",
+		"Accept-Signature and Want-Content-Digest headers are added with supplied algorithms": {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
@@ -351,7 +341,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			hdr := make(http.Header)
 
 			builder, err := NewAcceptSignature(tc.opts...)
