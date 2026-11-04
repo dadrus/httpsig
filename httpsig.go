@@ -35,7 +35,7 @@ var (
 	// ErrUnsupportedComponentIdentifier indicates that a covered component identifier is unsupported.
 	ErrUnsupportedComponentIdentifier = errors.New("unsupported component identifier")
 
-	// ErrInvalidComponentIdentifier indicates malformed or invalid parameters on a component identifier.
+	// ErrInvalidComponentIdentifier indicates a malformed component identifier or invalid component parameters.
 	ErrInvalidComponentIdentifier = errors.New("invalid component identifier")
 
 	// ErrCanonicalization indicates that a covered HTTP message component could not be canonicalized.

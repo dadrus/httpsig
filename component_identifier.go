@@ -79,10 +79,12 @@ func toComponentIdentifiers(identifiers []string) ([]*componentIdentifier, error
 }
 
 func newComponentIdentifier(item httpsfv.Item) (*componentIdentifier, error) {
-	// ok if panics
-	name := strings.ToLower(item.Value.(string)) //nolint: forcetypeassert
+	name, ok := item.Value.(string)
+	if !ok {
+		return nil, fmt.Errorf("%w: component name must be a string", ErrInvalidComponentIdentifier)
+	}
 
-	canonicalizer, err := canonicalizerFor(name)
+	canonicalizer, err := canonicalizerFor(strings.ToLower(name))
 	if err != nil {
 		return nil, err
 	}
