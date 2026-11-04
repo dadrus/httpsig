@@ -200,10 +200,10 @@ func (p SignatureParameters) KeyID() (string, bool) {
 }
 
 // Alg returns the alg parameter if present and of the expected type.
-func (p SignatureParameters) Alg() (string, bool) {
+func (p SignatureParameters) Alg() (SignatureAlgorithm, bool) {
 	value, ok := p[Alg].(string)
 
-	return value, ok
+	return SignatureAlgorithm(value), ok
 }
 
 // Created returns the created parameter as a Unix timestamp if it has the expected type.

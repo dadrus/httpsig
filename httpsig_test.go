@@ -45,12 +45,12 @@ func TestSignatureParametersAlg(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		params SignatureParameters
-		want   string
+		want   SignatureAlgorithm
 		wantOK bool
 	}{
 		"present": {
 			params: SignatureParameters{Alg: "ed25519"},
-			want:   "ed25519",
+			want:   Ed25519,
 			wantOK: true,
 		},
 		"empty string": {
