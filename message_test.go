@@ -17,20 +17,17 @@ import (
 func TestCreateUniqueLabel(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc            string
+	for uc, tc := range map[string]struct {
 		label         string
 		dict          *httpsfv.Dictionary
 		expectedLabel string
 	}{
-		{
-			uc:            "given label not already taken",
+		"given label not already taken": {
 			label:         "foo",
 			dict:          httpsfv.NewDictionary(),
 			expectedLabel: "foo",
 		},
-		{
-			uc:    "given label already taken #1",
+		"given label already taken #1": {
 			label: "foo",
 			dict: func() *httpsfv.Dictionary {
 				dict := httpsfv.NewDictionary()
@@ -40,8 +37,7 @@ func TestCreateUniqueLabel(t *testing.T) {
 			}(),
 			expectedLabel: "foo1",
 		},
-		{
-			uc:    "given label already taken #2",
+		"given label already taken #2": {
 			label: "foo",
 			dict: func() *httpsfv.Dictionary {
 				dict := httpsfv.NewDictionary()
@@ -53,7 +49,7 @@ func TestCreateUniqueLabel(t *testing.T) {
 			expectedLabel: "foo2",
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			label := createUniqueLabel(tc.label, tc.dict)
 
 			assert.Equal(t, tc.expectedLabel, label)
@@ -279,13 +275,11 @@ func TestMessageFromRequest(t *testing.T) {
 	expURL, err := url.Parse("http://example.com?foo=bar")
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		req    *http.Request
 		assert func(t *testing.T, msg *Message)
 	}{
-		{
-			uc: "outbound request without body",
+		"outbound request without body": {
 			req: func() *http.Request {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -330,8 +324,7 @@ func TestMessageFromRequest(t *testing.T) {
 				assert.Empty(t, data1)
 			},
 		},
-		{
-			uc: "inbound request without body",
+		"inbound request without body": {
 			req: func() *http.Request {
 				req := httptest.NewRequestWithContext(
 					t.Context(),
@@ -374,8 +367,7 @@ func TestMessageFromRequest(t *testing.T) {
 				assert.Empty(t, data1)
 			},
 		},
-		{
-			uc: "outbound request with body",
+		"outbound request with body": {
 			req: func() *http.Request {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -420,8 +412,7 @@ func TestMessageFromRequest(t *testing.T) {
 				assert.JSONEq(t, `{"hello": "world"}`, string(data1))
 			},
 		},
-		{
-			uc: "inbound request with body",
+		"inbound request with body": {
 			req: func() *http.Request {
 				req := httptest.NewRequestWithContext(
 					t.Context(),
@@ -463,7 +454,7 @@ func TestMessageFromRequest(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			msg := MessageFromRequest(tc.req)
 
 			tc.assert(t, msg)
@@ -494,13 +485,11 @@ Content-Length: 23
 	expURL, err := url.Parse("http://example.com?foo=bar")
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		resp   *http.Response
 		assert func(t *testing.T, msg *Message)
 	}{
-		{
-			uc: "response without body",
+		"response without body": {
 			resp: func() *http.Response {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -563,8 +552,7 @@ Content-Length: 23
 				assert.Empty(t, data1)
 			},
 		},
-		{
-			uc: "response with body",
+		"response with body": {
 			resp: func() *http.Response {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -628,7 +616,7 @@ Content-Length: 23
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			msg := MessageFromResponse(tc.resp)
 
 			tc.assert(t, msg)
@@ -642,15 +630,13 @@ func TestMessageForResponse(t *testing.T) {
 	expURL, err := url.Parse("http://example.com?foo=bar")
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc         string
+	for uc, tc := range map[string]struct {
 		req        *http.Request
 		respHeader http.Header
 		respBody   []byte
 		assert     func(t *testing.T, msg *Message)
 	}{
-		{
-			uc: "response without body",
+		"response without body": {
 			req: func() *http.Request {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -714,8 +700,7 @@ func TestMessageForResponse(t *testing.T) {
 				assert.Empty(t, data1)
 			},
 		},
-		{
-			uc: "response with body",
+		"response with body": {
 			req: func() *http.Request {
 				req, err := http.NewRequestWithContext(
 					t.Context(),
@@ -781,7 +766,7 @@ func TestMessageForResponse(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			msg := MessageForResponse(tc.req, tc.respHeader, tc.respBody, http.StatusOK)
 
 			tc.assert(t, msg)
