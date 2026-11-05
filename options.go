@@ -366,10 +366,15 @@ func validateNonceOption(value any) (string, error) {
 }
 
 // WithValidityTolerance specifies the allowed clock skew for created and
-// expires timestamp checks.
-func WithValidityTolerance(d time.Duration) VerifierOption {
+// expires timestamp checks. The duration must not be negative; zero allows
+// no clock skew.
+func WithValidityTolerance(tolerance time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
-		e.tolerance = d
+		if tolerance < 0 {
+			return fmt.Errorf("%w: validity tolerance must not be negative", ErrParameter)
+		}
+
+		e.tolerance = &tolerance
 
 		return nil
 	})
@@ -401,10 +406,7 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)
 		}
 
-		policy := &verificationPolicy{
-			tolerance: -1,
-			maxAge:    -1,
-		}
+		policy := &verificationPolicy{maxAge: -1}
 
 		for _, opt := range opts {
 			if err := opt.applyVerifierOption(ver, policy, true); err != nil {

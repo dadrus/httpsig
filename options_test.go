@@ -618,14 +618,29 @@ func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 func TestWithValidityTolerance(t *testing.T) {
 	t.Parallel()
 
-	v := &verifier{}
-	exp := &verificationPolicy{}
+	for uc, tc := range map[string]struct {
+		tolerance time.Duration
+		wantError bool
+	}{
+		"positive tolerance":   {tolerance: time.Minute},
+		"zero tolerance":       {},
+		"negative tolerance":   {tolerance: -time.Second, wantError: true},
+		"minus one nanosecond": {tolerance: -1, wantError: true},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			policy := &verificationPolicy{}
 
-	err := WithValidityTolerance(1*time.Minute).applyVerifierOption(v, exp, false)
-	require.NoError(t, err)
-
-	assert.Empty(t, v.tagPolicies)
-	assert.Equal(t, 1*time.Minute, exp.tolerance)
+			err := WithValidityTolerance(tc.tolerance).applyVerifierOption(&verifier{}, policy, false)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Nil(t, policy.tolerance)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, policy.tolerance)
+				assert.Equal(t, tc.tolerance, *policy.tolerance)
+			}
+		})
+	}
 }
 
 func TestWithMaxAge(t *testing.T) {
@@ -654,7 +669,7 @@ func TestWithRequiredTag(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, exp)
 				assert.Empty(t, exp.identifiers)
-				assert.Equal(t, time.Duration(-1), exp.tolerance) //nolint:testifylint
+				assert.Nil(t, exp.tolerance)
 			},
 		},
 		"with identifiers only": {
@@ -668,7 +683,7 @@ func TestWithRequiredTag(t *testing.T) {
 				require.NotNil(t, exp)
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, time.Duration(-1), exp.tolerance) //nolint:testifylint
+				assert.Nil(t, exp.tolerance)
 			},
 		},
 		"with tolerance only": {
@@ -681,7 +696,8 @@ func TestWithRequiredTag(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, exp)
 				assert.Empty(t, exp.identifiers)
-				assert.Equal(t, 5*time.Minute, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 5*time.Minute, *exp.tolerance)
 			},
 		},
 		"with all possible options": {
@@ -696,7 +712,8 @@ func TestWithRequiredTag(t *testing.T) {
 				require.NotNil(t, exp)
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 5*time.Minute, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 5*time.Minute, *exp.tolerance)
 			},
 		},
 		"with unsupported identifier": {

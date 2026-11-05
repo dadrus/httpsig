@@ -12,7 +12,7 @@ import (
 )
 
 type verificationPolicy struct {
-	tolerance           time.Duration
+	tolerance           *time.Duration
 	maxAge              time.Duration
 	identifiers         []*componentIdentifier
 	asb                 *AcceptSignatureBuilder
@@ -57,7 +57,7 @@ func (e *verificationPolicy) withOptions(tag string, opts []VerifyOption) (*veri
 // inherit applies global requirements to a tag-specific configuration.
 // Tag-specific values take precedence, while parameter requirements remain additive.
 func (e *verificationPolicy) inherit(globalPolicy *verificationPolicy, tag string) error {
-	if e.tolerance == -1 {
+	if e.tolerance == nil {
 		e.tolerance = globalPolicy.tolerance
 	}
 
@@ -252,16 +252,21 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 		missingComponents []string
 		cmv               compositeMessageVerifier
 		mv                messageVerifier
+		tolerance         time.Duration
 	)
 
 	now := time.Now().UTC()
+
+	if e.tolerance != nil {
+		tolerance = *e.tolerance
+	}
 
 	expires, expiresPresent := si.expires()
 	if !expiresPresent {
 		if *e.reqExpiresTS {
 			return fmt.Errorf("%w: expected expires parameter not present", ErrMissingParameter)
 		}
-	} else if now.After(expires.Add(e.tolerance)) {
+	} else if now.After(expires.Add(tolerance)) {
 		return fmt.Errorf("%w: signature expired", ErrValidity)
 	}
 
@@ -271,7 +276,7 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 			return fmt.Errorf("%w: expected created parameter not present", ErrMissingParameter)
 		}
 	} else {
-		if now.Before(created.Add(-1 * e.tolerance)) {
+		if now.Before(created.Add(-1 * tolerance)) {
 			return fmt.Errorf("%w: signature not yet valid", ErrValidity)
 		}
 

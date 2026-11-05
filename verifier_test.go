@@ -186,7 +186,8 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 			},
 		},
 		"with global defaults without signature negotiation": {
@@ -209,7 +210,8 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 				assert.Nil(t, exp.asb)
 			},
 		},
@@ -238,7 +240,8 @@ func TestNewVerifier(t *testing.T) {
 				assert.Len(t, exp.identifiers, 2)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
 				assert.Equal(t, "content-digest", exp.identifiers[1].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 				require.NotNil(t, exp.asb)
 				assert.Nil(t, exp.asb.nonceGetter)
 				assert.Equal(t, "sig", exp.asb.label)
@@ -275,13 +278,15 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies[""]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@method", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Minute, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Minute, *exp.tolerance)
 
 				require.Contains(t, v.tagPolicies, "test")
 				exp = v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 			},
 		},
 		"parameter rules inherited from global configuration": {
