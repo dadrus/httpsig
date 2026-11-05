@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -47,7 +48,7 @@ func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
 			actual, present := identifier.Params.Get(name)
 
 			expected, _ := id.Params.Get(name)
-			if !present || actual != expected {
+			if !present || !equalComponentParameterValues(actual, expected) {
 				matches = false
 
 				break
@@ -170,4 +171,14 @@ func validateSignatureInputParameters(params *httpsfv.Params) error {
 	}
 
 	return nil
+}
+
+func equalComponentParameterValues(actual, expected any) bool {
+	if expectedBytes, ok := expected.([]byte); ok {
+		actualBytes, ok := actual.([]byte)
+
+		return ok && bytes.Equal(actualBytes, expectedBytes)
+	}
+
+	return actual == expected
 }

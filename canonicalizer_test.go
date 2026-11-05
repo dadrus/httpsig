@@ -420,7 +420,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for request - valid": {
-			identifier: `"@query-param";name=bar`,
+			identifier: `"@query-param";name="bar"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
 				t.Helper()
@@ -430,7 +430,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for request - valid with duplicate unrelated parameter": {
-			identifier: `"@query-param";name=foo`,
+			identifier: `"@query-param";name="foo"`,
 			message:    &Message{URL: &url.URL{RawQuery: "foo=bar&other=one&other=two"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
 				t.Helper()
@@ -440,7 +440,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for request - invalid, duplicate parameter": {
-			identifier: `"@query-param";name=foo`,
+			identifier: `"@query-param";name="foo"`,
 			message:    &Message{URL: &url.URL{RawQuery: "foo=one&foo=two"}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -450,7 +450,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for request - invalid, duplicate encoded parameter": {
-			identifier: `"@query-param";name=foo`,
+			identifier: `"@query-param";name="foo"`,
 			message:    &Message{URL: &url.URL{RawQuery: "foo=one&%66oo=two"}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -460,7 +460,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for response - invalid, duplicate request parameter": {
-			identifier: `"@query-param";name=foo;req`,
+			identifier: `"@query-param";name="foo";req`,
 			message:    &Message{URL: &url.URL{RawQuery: "foo=one&foo=two"}, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -480,19 +480,19 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "named parameter")
 			},
 		},
-		"@query-param for request - invalid query param escaping": {
-			identifier: `"@query-param";name=1`,
+		"@query-param for request - invalid token name parameter": {
+			identifier: `"@query-param";name=foo`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
 
 				require.Error(t, err)
-				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
 				require.ErrorContains(t, err, "must be a string")
 			},
 		},
 		"@query-param for request - invalid, parameter not present in query": {
-			identifier: `"@query-param";name=moo`,
+			identifier: `"@query-param";name="moo"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -503,7 +503,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for response - valid": {
-			identifier: `"@query-param";name=foo;req`,
+			identifier: `"@query-param";name="foo";req`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
 				t.Helper()
@@ -513,7 +513,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"@query-param for response - invalid": {
-			identifier: `"@query-param";name=foo`,
+			identifier: `"@query-param";name="foo"`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -589,7 +589,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 		"header component for request - invalid, serialization error": {
-			identifier: `"X-Foo-Bar";sf;key=foo`,
+			identifier: `"X-Foo-Bar";sf;key="foo"`,
 			message:    &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
@@ -637,7 +637,7 @@ func TestCanonicalization(t *testing.T) {
 			c, err := canonicalizerFor(strings.ToLower(item.Value.(string)))
 			require.NoError(t, err)
 
-			res, err := c.canonicalize(tc.message, normaliseParams(item.Params))
+			res, err := c.canonicalize(tc.message, item.Params)
 
 			tc.assert(t, err, res)
 		})

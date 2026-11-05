@@ -26,78 +26,6 @@ func TestQuoteIdentifierName(t *testing.T) {
 	}
 }
 
-func TestNormalizeParams(t *testing.T) {
-	t.Parallel()
-
-	for uc, tc := range map[string]struct {
-		given  *httpsfv.Params
-		expect *httpsfv.Params
-	}{
-		"empty params": {
-			given:  httpsfv.NewParams(),
-			expect: httpsfv.NewParams(),
-		},
-		"byte array params": {
-			given: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", []byte("test"))
-
-				return params
-			}(),
-			expect: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", "dGVzdA==")
-
-				return params
-			}(),
-		},
-		"token params": {
-			given: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", httpsfv.Token("token"))
-
-				return params
-			}(),
-			expect: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", "token")
-
-				return params
-			}(),
-		},
-		"bare item params": {
-			given: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", 1)
-
-				return params
-			}(),
-			expect: func() *httpsfv.Params {
-				params := httpsfv.NewParams()
-				params.Add("test", 1)
-
-				return params
-			}(),
-		},
-	} {
-		t.Run(uc, func(t *testing.T) {
-			res := normaliseParams(tc.given)
-
-			assert.Equal(t, tc.given.Names(), res.Names())
-
-			for _, name := range res.Names() {
-				resVal, ok := res.Get(name)
-				assert.True(t, ok)
-
-				expVal, ok := tc.expect.Get(name)
-				assert.True(t, ok)
-
-				assert.Equal(t, expVal, resVal)
-			}
-		})
-	}
-}
-
 func TestToComponentIdentifiers(t *testing.T) {
 	t.Parallel()
 
@@ -132,6 +60,32 @@ func TestToComponentIdentifiers(t *testing.T) {
 				assert.Nil(t, ci)
 			},
 		},
+		"preserving structured field parameter types": {
+			identifiers: []string{`x-test;string="abc";token=abc;bytes=:AQID:`},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, ci, 1)
+
+				stringValue, ok := ci[0].Params.Get("string")
+				require.True(t, ok)
+				assert.Equal(t, "abc", stringValue)
+
+				tokenValue, ok := ci[0].Params.Get("token")
+				require.True(t, ok)
+				assert.Equal(t, httpsfv.Token("abc"), tokenValue)
+
+				bytesValue, ok := ci[0].Params.Get("bytes")
+				require.True(t, ok)
+				assert.Equal(t, []byte{1, 2, 3}, bytesValue)
+
+				input := newSignatureInput(ci, nil)
+				marshalled, err := httpsfv.Marshal(input.value)
+				require.NoError(t, err)
+				assert.Equal(t, `("x-test";string="abc";token=abc;bytes=:AQID:)`, marshalled)
+			},
+		},
 		"valid": {
 			identifiers: []string{"@method;foo=bar", "@status", `@query-param;name="Pet"`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
@@ -143,7 +97,7 @@ func TestToComponentIdentifiers(t *testing.T) {
 				assert.Equal(t, "@method", ci[0].Value.(string))
 				res, ok := ci[0].Params.Get("foo")
 				require.True(t, ok)
-				require.Equal(t, "bar", res.(string))
+				require.Equal(t, httpsfv.Token("bar"), res)
 				assert.NotNil(t, ci[0].c)
 
 				assert.Equal(t, "@status", ci[1].Value.(string))
@@ -206,7 +160,7 @@ func TestNewComponentIdentifier(t *testing.T) {
 
 				val, ok := ci.Params.Get("foo")
 				require.True(t, ok)
-				assert.Equal(t, "YmFy", val)
+				assert.Equal(t, []byte("bar"), val)
 			},
 		},
 	} {
