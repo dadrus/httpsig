@@ -290,6 +290,31 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				require.ErrorContains(t, err, "too old")
 			},
 		},
+		"expected component identifier has different parameter value": {
+			params: httpsfv.InnerList{
+				Items: []httpsfv.Item{{
+					Value: "@query-param",
+					Params: func() *httpsfv.Params {
+						params := httpsfv.NewParams()
+						params.Add("name", "bar")
+
+						return params
+					}(),
+				}},
+			},
+			exp: func() verificationPolicy {
+				ids, err := toComponentIdentifiers([]string{`@query-param;name="foo"`})
+				require.NoError(t, err)
+
+				return verificationPolicy{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
+			}(),
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMissingParameter)
+				require.ErrorContains(t, err, `"@query-param";name="foo"`)
+			},
+		},
 		"expected component identifier missing": {
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
 			exp: func() verificationPolicy {

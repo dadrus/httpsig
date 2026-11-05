@@ -277,7 +277,9 @@ func (v *rsaVerifier) verify(_ context.Context, payload []byte, signature []byte
 	case RsaPkcs1v15Sha256, RsaPkcs1v15Sha384, RsaPkcs1v15Sha512:
 		err = rsa.VerifyPKCS1v15(v.publicKey, v.hash, hashed, signature)
 	case RsaPssSha256, RsaPssSha384, RsaPssSha512:
-		err = rsa.VerifyPSS(v.publicKey, v.hash, hashed, signature, nil)
+		err = rsa.VerifyPSS(v.publicKey, v.hash, hashed, signature, &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+		})
 	}
 
 	if err != nil {

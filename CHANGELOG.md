@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.10.0](https://github.com/dadrus/httpsig/compare/v0.9.0...v0.10.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* Signing and verification API refactored ([#166](https://github.com/dadrus/httpsig/issues/166))
+
+### Features
+
+* Supporting arbitrary signature parameters ([#156](https://github.com/dadrus/httpsig/issues/156)) ([c291c6d](https://github.com/dadrus/httpsig/commit/c291c6de11362f3a651b625f040413b92375cb79))
+
+
+### Code Refactorings
+
+* Signing and verification API refactored ([#166](https://github.com/dadrus/httpsig/issues/166)) ([bf37e1d](https://github.com/dadrus/httpsig/commit/bf37e1dd8cb67dc6f8f5f8f71a649eb77111aed9))
+
+
+### Bug Fixes
+
+* Clearing stale `Want-Content-Digest` on component override ([#178](https://github.com/dadrus/httpsig/issues/178)) ([2442d24](https://github.com/dadrus/httpsig/commit/2442d2420b8811e12753f8d1a81fe356fcb4a3ee))
+* Comparing complete covered component identifiers ([#179](https://github.com/dadrus/httpsig/issues/179)) ([2612e66](https://github.com/dadrus/httpsig/commit/2612e6677431454a0159907a4029eb12ed6eb0b6))
+* Enforcing RSA-PSS salt length during verification ([#177](https://github.com/dadrus/httpsig/issues/177)) ([a84f87c](https://github.com/dadrus/httpsig/commit/a84f87c0d4799377c901318517060ba247988224))
+* Ensuring component names are lowercase ([#172](https://github.com/dadrus/httpsig/issues/172)) ([2d41d74](https://github.com/dadrus/httpsig/commit/2d41d7498fecb62b2e58f7ff38e15450ec2fb123))
+* Rejecting non-string signature component identifiers ([#171](https://github.com/dadrus/httpsig/issues/171)) ([a29c153](https://github.com/dadrus/httpsig/commit/a29c153a97d8eaf90dde17e88a8be2c557ccd063))
+* Rejecting repeated query parameters in [@query-param](https://github.com/query-param) ([#173](https://github.com/dadrus/httpsig/issues/173)) ([c4b0650](https://github.com/dadrus/httpsig/commit/c4b06507c7b34abcf78231fb45d84878694fb630))
+
+
+### Dependencies
+
+* update golang to v1.26.9 ([#158](https://github.com/dadrus/httpsig/issues/158)) ([d3db29a](https://github.com/dadrus/httpsig/commit/d3db29a894019a6344b13e59d22c4f87b8132edc))
+* update module github.com/dunglas/httpsfv to v1.1.2 ([#148](https://github.com/dadrus/httpsig/issues/148)) ([4a9c892](https://github.com/dadrus/httpsig/commit/4a9c892b21eba4e8e50ce3292985106b282754a2))
+* update module github.com/stretchr/testify to v1.12.1 ([#143](https://github.com/dadrus/httpsig/issues/143)) ([95e9f49](https://github.com/dadrus/httpsig/commit/95e9f4901c32b5d169775caa30bedffeba30c4b0))
+
 ## [0.9.0](https://github.com/dadrus/httpsig/compare/v0.8.0...v0.9.0) (2026-05-15)
 
 
