@@ -256,6 +256,7 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 	)
 
 	now := time.Now().UTC()
+
 	if e.tolerance != nil {
 		tolerance = *e.tolerance
 	}
