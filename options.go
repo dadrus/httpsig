@@ -78,6 +78,8 @@ func (f verifierOptionFunc) applyVerifierOption(v *verifier, e *verificationPoli
 
 // WithLabel specifies the technical label for a signature or an
 // Accept-Signature request. An empty label leaves the current label unchanged.
+// For Verify, it selects the signature to check; see WithSignatureSelection.
+// There, an empty label is rejected.
 func WithLabel(label string) labelOption {
 	return labelOption(label)
 }
@@ -110,6 +112,24 @@ func (o labelOption) applyAcceptSignatureOption(asb *AcceptSignatureBuilder) err
 
 func (o labelOption) applySignatureNegotiationOption(opts *sigNegotiationOptions) {
 	opts.opts = append(opts.opts, o)
+}
+
+func (o labelOption) applyVerifyOption(policy *verificationPolicy) error {
+	if !policy.labelSelection {
+		return fmt.Errorf("%w: selecting a signature by label requires WithSignatureSelection", ErrParameter)
+	}
+
+	if len(o) == 0 {
+		return fmt.Errorf("%w: signature label must not be empty", ErrParameter)
+	}
+
+	if len(policy.selectedLabel) != 0 {
+		return fmt.Errorf("%w: signature label specified more than once", ErrParameter)
+	}
+
+	policy.selectedLabel = string(o)
+
+	return nil
 }
 
 // WithTTL specifies the interval between the created and expires signature
@@ -440,6 +460,20 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 func WithValidateAllSignatures() VerifierOption {
 	return verifierOptionFunc(func(v *verifier, _ *verificationPolicy, _ bool) error {
 		v.validateAllSigs = true
+
+		return nil
+	})
+}
+
+// WithSignatureSelection makes every Verify call check only the one signature
+// chosen through WithLabel, which is then required on each call. The verifier's
+// requirements apply to that signature and other signatures do not affect the
+// result, except that the Signature-Input and Signature fields as a whole must
+// be valid Structured Fields. It cannot be combined with WithValidateAllSignatures,
+// WithRequiredTag, or WithSignatureNegotiation.
+func WithSignatureSelection() VerifierOption {
+	return verifierOptionFunc(func(v *verifier, _ *verificationPolicy, _ bool) error {
+		v.signatureSelection = true
 
 		return nil
 	})

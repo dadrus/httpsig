@@ -98,6 +98,60 @@ func TestNewVerifier(t *testing.T) {
 				require.ErrorContains(t, err, "validation of all signatures disabled, but no signature tags specified")
 			},
 		},
+		"with signature selection": {
+			resolver: &KeyResolverMock{},
+			opts:     []VerifierOption{WithSignatureSelection()},
+			assert: func(t *testing.T, err error, v *verifier) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.True(t, v.signatureSelection)
+				assert.False(t, v.validateAllSigs)
+				require.Contains(t, v.tagPolicies, "")
+				assert.True(t, v.tagPolicies[""].labelSelection)
+				assert.Empty(t, v.tagPolicies[""].selectedLabel)
+			},
+		},
+		"with signature selection and validation of all signatures": {
+			resolver: &KeyResolverMock{},
+			opts:     []VerifierOption{WithSignatureSelection(), WithValidateAllSignatures()},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorContains(t, err, "signature selection cannot be combined")
+			},
+		},
+		"with signature selection and required tag": {
+			resolver: &KeyResolverMock{},
+			opts:     []VerifierOption{WithRequiredTag("foo"), WithSignatureSelection()},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorContains(t, err, "signature selection cannot be combined")
+			},
+		},
+		"with signature selection nested in required tag": {
+			resolver: &KeyResolverMock{},
+			opts:     []VerifierOption{WithRequiredTag("foo", WithSignatureSelection())},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorContains(t, err, "signature selection cannot be combined")
+			},
+		},
+		"with signature selection and signature negotiation": {
+			resolver: &KeyResolverMock{},
+			opts:     []VerifierOption{WithSignatureSelection(), WithSignatureNegotiation()},
+			assert: func(t *testing.T, err error, _ *verifier) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerifierCreation)
+				require.ErrorContains(t, err, "signature selection cannot be combined")
+			},
+		},
 		"with component identifiers configuration error": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
@@ -2064,6 +2118,311 @@ func TestVerifierVerify(t *testing.T) {
 		for err := range errors {
 			require.NoError(t, err)
 		}
+	})
+}
+
+func TestVerifierSignatureSelection(t *testing.T) {
+	block, _ := pem.Decode([]byte(testPubKeyEd25519))
+	require.NotNil(t, block, "failed to parse PEM block containing the public key")
+
+	key, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err, "could not decode test public key")
+
+	pubKey, ok := key.(ed25519.PublicKey)
+	require.True(t, ok)
+
+	testURL, err := url.Parse("http://example.com/foo?param=Value&Pet=dog")
+	require.NoError(t, err)
+
+	const (
+		validInput = `sig-b26=("date" "@method" "@path" "@authority" "content-type" "content-length");` +
+			`created=1618884473;keyid="test-key-ed25519"`
+		validSignature = "sig-b26=:wqcAqbmYJ2ji2glfAMaRy4gruYYnx2nEFN2HN6jrnDnQCK1u02Gb04v9EDgwUPiu4A0w6vuQv5l" +
+			"Ip5WPpBKRCw==:"
+	)
+
+	newMessage := func(input, signature string) *Message {
+		return &Message{
+			Method:    http.MethodPost,
+			Authority: "example.com",
+			URL:       testURL,
+			Header: http.Header{
+				"Date":            []string{"Tue, 20 Apr 2021 02:07:55 GMT"},
+				"Content-Type":    []string{"application/json"},
+				"Content-Length":  []string{"18"},
+				"Signature-Input": []string{input},
+				"Signature":       []string{signature},
+			},
+			Context:   t.Context(),
+			IsRequest: true,
+		}
+	}
+
+	resolver := func(t *testing.T) *KeyResolverMock {
+		t.Helper()
+
+		kr := NewKeyResolverMock(t)
+		kr.EXPECT().ResolveKey(mock.Anything, mock.MatchedBy(func(si SignatureInfo) bool {
+			return si.Label == "sig-b26"
+		})).Return(KeyInfo{
+			Key: Key{Algorithm: Ed25519, Material: pubKey},
+		}, nil).Once()
+
+		return kr
+	}
+
+	noResolver := func(t *testing.T) *KeyResolverMock {
+		t.Helper()
+
+		return NewKeyResolverMock(t)
+	}
+
+	for uc, tc := range map[string]struct {
+		opts       []VerifierOption
+		verifyOpts []VerifyOption
+		msg        *Message
+		resolver   func(t *testing.T) *KeyResolverMock
+		assert     func(t *testing.T, err error, results VerificationResult)
+	}{
+		"verifies the selected signature": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   resolver,
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "sig-b26", results[0].Label)
+			},
+		},
+		"ignores an unrelated invalid signature": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg: newMessage(validInput+`, proxy=("@method");created=1;keyid="unknown"`,
+				validSignature+", proxy=:AAAA:"),
+			resolver: resolver,
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "sig-b26", results[0].Label)
+			},
+		},
+		"ignores an unrelated malformed signature input member": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg: newMessage(validInput+`, broken=();keyid=token, scalar=1`,
+				validSignature+`, scalar="not-a-signature"`),
+			resolver: resolver,
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "sig-b26", results[0].Label)
+			},
+		},
+		"applies the verifier policy to a tagged signature": {
+			verifyOpts: []VerifyOption{WithLabel("sig")},
+			msg:        newMessage(`sig=("@method");tag="foo";keyid="k"`, "sig=:AAAA:"),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				// The default policy requires created and expires.
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+			},
+		},
+		"applies the verifier requirements": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false), WithComponents("x-missing")},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+			},
+		},
+		"applies per-call requirements": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26"), WithRequiredParameters(Nonce)},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+		"fails if the selected signature is invalid": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg:        newMessage(validInput, "sig-b26=:AAAA:"),
+			resolver:   resolver,
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.NotErrorIs(t, err, &NoApplicableSignatureError{})
+				assert.Empty(t, results)
+			},
+		},
+		"fails if the selected member is malformed": {
+			verifyOpts: []VerifyOption{WithLabel("broken")},
+			msg:        newMessage(`broken=();keyid=token`, "broken=:AAAA:"),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrMalformedData)
+			},
+		},
+		"fails if the selected member is not an inner list": {
+			verifyOpts: []VerifyOption{WithLabel("scalar")},
+			msg:        newMessage(`scalar=1`, "scalar=:AAAA:"),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrMalformedData)
+			},
+		},
+		"fails if the signature value is missing": {
+			opts:       []VerifierOption{WithExpiresTimestamp(false)},
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg:        newMessage(validInput, "other=:AAAA:"),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrMalformedData)
+			},
+		},
+		"fails if the field is not valid structured fields": {
+			verifyOpts: []VerifyOption{WithLabel("sig-b26")},
+			msg:        newMessage(validInput+`, (`, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrMalformedData)
+			},
+		},
+		"no signature with the label": {
+			verifyOpts: []VerifyOption{WithLabel("other")},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, &NoApplicableSignatureError{})
+			},
+		},
+		"without label": {
+			msg:      newMessage(validInput, validSignature),
+			resolver: noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+		"without label but with other per-call options": {
+			verifyOpts: []VerifyOption{WithRequiredParameters(Nonce)},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+		"with empty label": {
+			verifyOpts: []VerifyOption{WithLabel("")},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+		"with label given more than once": {
+			verifyOpts: []VerifyOption{WithLabel("sig-b26"), WithLabel("sig-b26")},
+			msg:        newMessage(validInput, validSignature),
+			resolver:   noResolver,
+			assert: func(t *testing.T, err error, _ VerificationResult) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			withRFC9421Time(t, func(t *testing.T) {
+				t.Helper()
+
+				kr := tc.resolver(t)
+
+				ver, err := NewVerifier(kr, append([]VerifierOption{WithSignatureSelection()}, tc.opts...)...)
+				require.NoError(t, err)
+
+				results, err := ver.Verify(tc.msg, tc.verifyOpts...)
+
+				tc.assert(t, err, results)
+			})
+		})
+	}
+
+	t.Run("label is rejected without signature selection", func(t *testing.T) {
+		for uc, opts := range map[string][]VerifierOption{
+			"validate all signatures": {WithValidateAllSignatures()},
+			"required tag":            {WithRequiredTag("foo")},
+		} {
+			t.Run(uc, func(t *testing.T) {
+				ver, err := NewVerifier(NewKeyResolverMock(t), opts...)
+				require.NoError(t, err)
+
+				_, err = ver.Verify(newMessage(validInput, validSignature), WithLabel("sig-b26"))
+
+				require.ErrorIs(t, err, ErrVerificationFailed)
+				require.ErrorIs(t, err, ErrParameter)
+			})
+		}
+	})
+
+	t.Run("label does not persist between calls", func(t *testing.T) {
+		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
+
+			ver, err := NewVerifier(resolver(t), WithSignatureSelection(), WithExpiresTimestamp(false))
+			require.NoError(t, err)
+
+			msg := newMessage(validInput, validSignature)
+
+			results, err := ver.Verify(msg, WithLabel("sig-b26"))
+			require.NoError(t, err)
+			require.Len(t, results, 1)
+
+			_, err = ver.Verify(msg)
+			require.ErrorIs(t, err, ErrParameter)
+		})
 	})
 }
 
