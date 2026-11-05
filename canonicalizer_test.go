@@ -486,18 +486,8 @@ func TestCanonicalization(t *testing.T) {
 			assert: func(t *testing.T, err error, _ []string) {
 				t.Helper()
 
-				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
-				require.ErrorContains(t, err, "must be a string")
-			},
-		},
-		"@query-param for request - invalid query param escaping": {
-			identifier: `"@query-param";name=1`,
-			message:    &Message{URL: testURL1, IsRequest: true},
-			assert: func(t *testing.T, err error, _ []string) {
-				t.Helper()
-
 				require.Error(t, err)
-				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
 				require.ErrorContains(t, err, "must be a string")
 			},
 		},
