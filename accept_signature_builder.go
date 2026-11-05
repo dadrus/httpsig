@@ -132,6 +132,7 @@ func (asb *AcceptSignatureBuilder) Build(
 
 func (asb *AcceptSignatureBuilder) setIdentifiers(identifiers []*componentIdentifier) {
 	asb.identifiers = identifiers
+	asb.wantContentDigest = false
 
 	for _, identifier := range asb.identifiers {
 		if identifier.Value == componentIdentifierContentDigest {
