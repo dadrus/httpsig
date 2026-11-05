@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/hmac"
@@ -23,7 +24,7 @@ func newSymmetricSigner(key []byte, alg SignatureAlgorithm) (*symmetricSigner, e
 	}
 
 	return &symmetricSigner{
-		key:  key,
+		key:  bytes.Clone(key),
 		hash: hash,
 	}, nil
 }
