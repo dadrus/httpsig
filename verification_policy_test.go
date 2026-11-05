@@ -60,7 +60,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 
 	required := true
 	global := &verificationPolicy{
-		tolerance:           2 * time.Second,
+		tolerance:           new(2 * time.Second),
 		maxAge:              30 * time.Second,
 		identifiers:         globalIDs,
 		reqCreatedTS:        &required,
@@ -74,7 +74,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 	t.Run("inherits global configuration", func(t *testing.T) {
 		t.Parallel()
 
-		local := &verificationPolicy{tolerance: -1, maxAge: -1}
+		local := &verificationPolicy{maxAge: -1}
 		require.NoError(t, local.inherit(global, "profile"))
 
 		assert.Equal(t, global.tolerance, local.tolerance)
@@ -104,7 +104,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 
 		localBuilder := &AcceptSignatureBuilder{label: "custom"}
 		local := &verificationPolicy{
-			tolerance:    time.Second,
+			tolerance:    new(time.Second),
 			maxAge:       5 * time.Second,
 			identifiers:  localIDs,
 			reqCreatedTS: &created,
@@ -113,7 +113,8 @@ func TestVerificationPolicyInherit(t *testing.T) {
 		}
 		require.NoError(t, local.inherit(global, "profile"))
 
-		assert.Equal(t, time.Second, local.tolerance)
+		require.NotNil(t, local.tolerance)
+		assert.Equal(t, time.Second, *local.tolerance)
 		assert.Equal(t, 5*time.Second, local.maxAge)
 		assert.Equal(t, localIDs, local.identifiers)
 		assert.False(t, *local.reqCreatedTS)
@@ -139,7 +140,6 @@ func TestVerificationPolicyInherit(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			t.Parallel()
 
-			local.tolerance = -1
 			local.maxAge = -1
 			require.ErrorIs(t, local.inherit(global, "profile"), ErrParameter)
 		})
@@ -184,7 +184,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				}(),
 			},
 			exp: verificationPolicy{
-				tolerance:    3 * time.Second,
+				tolerance:    new(3 * time.Second),
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
@@ -204,7 +204,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				}(),
 			},
 			exp: verificationPolicy{
-				tolerance:    2 * time.Second,
+				tolerance:    new(2 * time.Second),
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
@@ -242,7 +242,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				}(),
 			},
 			exp: verificationPolicy{
-				tolerance:    3 * time.Second,
+				tolerance:    new(3 * time.Second),
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
