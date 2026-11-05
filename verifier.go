@@ -65,7 +65,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	}
 
 	globalPolicy := &verificationPolicy{
-		maxAge:       30 * time.Second, //nolint:mnd
+		maxAge:       new(30 * time.Second), //nolint:mnd
 		reqExpiresTS: new(true),
 		reqCreatedTS: new(true),
 	}

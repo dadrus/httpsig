@@ -646,13 +646,29 @@ func TestWithValidityTolerance(t *testing.T) {
 func TestWithMaxAge(t *testing.T) {
 	t.Parallel()
 
-	v := &verifier{}
-	exp := &verificationPolicy{}
+	for uc, tc := range map[string]struct {
+		maxAge    time.Duration
+		wantError bool
+	}{
+		"positive max age":     {maxAge: 15 * time.Minute},
+		"zero max age":         {wantError: true},
+		"negative max age":     {maxAge: -time.Second, wantError: true},
+		"minus one nanosecond": {maxAge: -1, wantError: true},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			policy := &verificationPolicy{}
 
-	err := WithMaxAge(15*time.Minute).applyVerifierOption(v, exp, false)
-	require.NoError(t, err)
-
-	assert.Equal(t, 15*time.Minute, exp.maxAge)
+			err := WithMaxAge(tc.maxAge).applyVerifierOption(&verifier{}, policy, false)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Nil(t, policy.maxAge)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, policy.maxAge)
+				assert.Equal(t, tc.maxAge, *policy.maxAge)
+			}
+		})
+	}
 }
 
 func TestWithRequiredTag(t *testing.T) {

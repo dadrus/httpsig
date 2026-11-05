@@ -61,7 +61,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 	required := true
 	global := &verificationPolicy{
 		tolerance:           new(2 * time.Second),
-		maxAge:              30 * time.Second,
+		maxAge:              new(30 * time.Second),
 		identifiers:         globalIDs,
 		reqCreatedTS:        &required,
 		reqExpiresTS:        &required,
@@ -74,7 +74,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 	t.Run("inherits global configuration", func(t *testing.T) {
 		t.Parallel()
 
-		local := &verificationPolicy{maxAge: -1}
+		local := &verificationPolicy{}
 		require.NoError(t, local.inherit(global, "profile"))
 
 		assert.Equal(t, global.tolerance, local.tolerance)
@@ -105,7 +105,7 @@ func TestVerificationPolicyInherit(t *testing.T) {
 		localBuilder := &AcceptSignatureBuilder{label: "custom"}
 		local := &verificationPolicy{
 			tolerance:    new(time.Second),
-			maxAge:       5 * time.Second,
+			maxAge:       new(5 * time.Second),
 			identifiers:  localIDs,
 			reqCreatedTS: &created,
 			reqExpiresTS: &expires,
@@ -115,7 +115,8 @@ func TestVerificationPolicyInherit(t *testing.T) {
 
 		require.NotNil(t, local.tolerance)
 		assert.Equal(t, time.Second, *local.tolerance)
-		assert.Equal(t, 5*time.Second, local.maxAge)
+		require.NotNil(t, local.maxAge)
+		assert.Equal(t, 5*time.Second, *local.maxAge)
 		assert.Equal(t, localIDs, local.identifiers)
 		assert.False(t, *local.reqCreatedTS)
 		assert.False(t, *local.reqExpiresTS)
@@ -140,7 +141,6 @@ func TestVerificationPolicyInherit(t *testing.T) {
 		t.Run(uc, func(t *testing.T) {
 			t.Parallel()
 
-			local.maxAge = -1
 			require.ErrorIs(t, local.inherit(global, "profile"), ErrParameter)
 		})
 	}
@@ -262,7 +262,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				}(),
 			},
 			exp: verificationPolicy{
-				maxAge:       30 * time.Second,
+				maxAge:       new(30 * time.Second),
 				reqCreatedTS: &falseVal,
 				reqExpiresTS: &falseVal,
 			},
@@ -281,7 +281,11 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 					return params
 				}(),
 			},
-			exp: verificationPolicy{reqCreatedTS: &falseVal, reqExpiresTS: &falseVal},
+			exp: verificationPolicy{
+				maxAge:       new(time.Second),
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+			},
 			assert: func(t *testing.T, err error) {
 				t.Helper()
 
@@ -377,7 +381,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 
 				return verificationPolicy{
 					identifiers: ids,
-					maxAge:      5 * time.Second,
+					maxAge:      new(5 * time.Second),
 				}
 			}(),
 			assert: func(t *testing.T, err error) {

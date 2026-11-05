@@ -13,7 +13,7 @@ import (
 
 type verificationPolicy struct {
 	tolerance           *time.Duration
-	maxAge              time.Duration
+	maxAge              *time.Duration
 	identifiers         []*componentIdentifier
 	asb                 *AcceptSignatureBuilder
 	reqCreatedTS        *bool
@@ -61,7 +61,7 @@ func (e *verificationPolicy) inherit(globalPolicy *verificationPolicy, tag strin
 		e.tolerance = globalPolicy.tolerance
 	}
 
-	if e.maxAge == -1 {
+	if e.maxAge == nil {
 		e.maxAge = globalPolicy.maxAge
 	}
 
@@ -280,7 +280,7 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 			return fmt.Errorf("%w: signature not yet valid", ErrValidity)
 		}
 
-		if created.Add(e.maxAge).Before(now) {
+		if e.maxAge != nil && *e.maxAge > 0 && created.Add(*e.maxAge).Before(now) {
 			return fmt.Errorf("%w: signature too old", ErrValidity)
 		}
 	}
