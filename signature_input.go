@@ -42,8 +42,10 @@ func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
 		}
 
 		matches := true
+
 		for _, name := range id.Params.Names() {
 			actual, present := identifier.Params.Get(name)
+
 			expected, _ := id.Params.Get(name)
 			if !present || actual != expected {
 				matches = false
