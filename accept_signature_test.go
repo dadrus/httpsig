@@ -115,6 +115,27 @@ func TestParseAcceptSignature(t *testing.T) {
 			expected: []SignatureRequest{},
 			err:      []error{ErrMalformedData, ErrInvalidComponentIdentifier},
 		},
+		"duplicate component identifier": {
+			values:      []string{`sig=("@method" "@method")`},
+			expected:    []SignatureRequest{},
+			err:         []error{ErrMalformedData},
+			errContains: []string{"duplicate component identifier"},
+		},
+		"duplicate component identifier with reordered parameters": {
+			values: []string{
+				`bad=("x-dict";key="foo";sf "x-dict";sf;key="foo"), good=("@method")`,
+			},
+			expected:    []SignatureRequest{{Label: "good", Components: []string{"@method"}}},
+			err:         []error{ErrMalformedData},
+			errContains: []string{"duplicate component identifier"},
+		},
+		"same component with distinct parameters": {
+			values: []string{`sig=("@query-param";name="foo" "@query-param";name="bar")`},
+			expected: []SignatureRequest{{
+				Label:      "sig",
+				Components: []string{`@query-param;name="foo"`, `@query-param;name="bar"`},
+			}},
+		},
 		"unusable member keeps the usable ones": {
 			values: []string{`first=("@status"), bad=("@foo"), last=("@method")`},
 			expected: []SignatureRequest{

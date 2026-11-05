@@ -1,6 +1,7 @@
 package httpsig
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -86,6 +87,35 @@ func (c *componentIdentifier) optionValue() (string, error) {
 	}
 
 	return name + strings.TrimPrefix(marshalled, `"`+name+`"`), nil
+}
+
+// equal reports whether two component identifiers have the same name and
+// parameters, regardless of parameter order.
+func (c *componentIdentifier) equal(other *componentIdentifier) bool {
+	if c.Value != other.Value || len(c.Params.Names()) != len(other.Params.Names()) {
+		return false
+	}
+
+	for _, name := range c.Params.Names() {
+		actual, present := other.Params.Get(name)
+		expected, _ := c.Params.Get(name)
+
+		if !present || !equalComponentParameterValues(actual, expected) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func equalComponentParameterValues(actual, expected any) bool {
+	if expectedBytes, ok := expected.([]byte); ok {
+		actualBytes, ok := actual.([]byte)
+
+		return ok && bytes.Equal(actualBytes, expectedBytes)
+	}
+
+	return actual == expected
 }
 
 func (c *componentIdentifier) createComponent(msg *Message) (component, error) {

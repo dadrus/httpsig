@@ -2,6 +2,7 @@ package httpsig
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -76,6 +77,10 @@ func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 		ci, err := newComponentIdentifier(item)
 		if err != nil {
 			return err
+		}
+
+		if slices.ContainsFunc(p.identifiers, ci.equal) {
+			return fmt.Errorf("%w: duplicate component identifier %q", ErrMalformedData, ci.Value)
 		}
 
 		p.identifiers = append(p.identifiers, ci)
