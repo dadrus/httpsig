@@ -781,41 +781,66 @@ func TestSignatureInputHasIdentifier(t *testing.T) {
 	t.Parallel()
 
 	for uc, tc := range map[string]struct {
-		given      []*componentIdentifier
-		identifier *componentIdentifier
+		given      []string
+		identifier string
 		expected   bool
 	}{
 		"no identifiers": {
-			identifier: &componentIdentifier{
-				Item: httpsfv.Item{Value: "@method", Params: httpsfv.NewParams()},
-			},
-			expected: false,
+			identifier: "@method",
 		},
 		"matching identifier": {
-			given: []*componentIdentifier{{
-				Item: httpsfv.Item{Value: "@method", Params: httpsfv.NewParams()},
-			}},
-			identifier: &componentIdentifier{
-				Item: httpsfv.Item{Value: "@method", Params: httpsfv.NewParams()},
-			},
-			expected: true,
+			given:      []string{"@method"},
+			identifier: "@method",
+			expected:   true,
 		},
 		"different identifier name": {
-			given: []*componentIdentifier{{
-				Item: httpsfv.Item{Value: "@method", Params: httpsfv.NewParams()},
-			}},
-			identifier: &componentIdentifier{
-				Item: httpsfv.Item{Value: "@authority", Params: httpsfv.NewParams()},
-			},
-			expected: false,
+			given:      []string{"@method"},
+			identifier: "@authority",
+		},
+		"matching parameter value": {
+			given:      []string{`@query-param;name="foo"`},
+			identifier: `@query-param;name="foo"`,
+			expected:   true,
+		},
+		"different parameter value": {
+			given:      []string{`@query-param;name="bar"`},
+			identifier: `@query-param;name="foo"`,
+		},
+		"different parameter type": {
+			given:      []string{`x-test;value=1`},
+			identifier: `x-test;value="1"`,
+		},
+		"different flag value": {
+			given:      []string{`x-test;sf=?0`},
+			identifier: `x-test;sf`,
+		},
+		"different parameter name": {
+			given:      []string{`x-test;sf`},
+			identifier: `x-test;req`,
+		},
+		"additional parameter": {
+			given:      []string{`x-test;sf;req`},
+			identifier: `x-test;sf`,
+		},
+		"missing parameter": {
+			given:      []string{`x-test;sf`},
+			identifier: `x-test;sf;req`,
+		},
+		"different parameter order": {
+			given:      []string{`x-test;key="foo";req`},
+			identifier: `x-test;req;key="foo"`,
+			expected:   true,
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			input := &signatureInput{identifiers: tc.given}
+			given, err := toComponentIdentifiers(tc.given)
+			require.NoError(t, err)
 
-			found := input.hasIdentifier(tc.identifier)
+			ids, err := toComponentIdentifiers([]string{tc.identifier})
+			require.NoError(t, err)
 
-			require.Equal(t, tc.expected, found)
+			input := &signatureInput{identifiers: given}
+			assert.Equal(t, tc.expected, input.hasIdentifier(ids[0]))
 		})
 	}
 }
