@@ -65,7 +65,7 @@ func newComponentIdentifier(item httpsfv.Item) (*componentIdentifier, error) {
 		return nil, fmt.Errorf("%w: component name %q must be lowercase", ErrInvalidComponentIdentifier, name)
 	}
 
-	canonicalizer, err := canonicalizerFor(name)
+	canonicalizer, err := canonicalizerFor(name, item.Params)
 	if err != nil {
 		return nil, err
 	}

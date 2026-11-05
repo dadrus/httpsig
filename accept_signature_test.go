@@ -115,6 +115,16 @@ func TestParseAcceptSignature(t *testing.T) {
 			expected: []SignatureRequest{},
 			err:      []error{ErrMalformedData, ErrInvalidComponentIdentifier},
 		},
+		"query parameter without name": {
+			values:   []string{`sig=("@query-param")`},
+			expected: []SignatureRequest{},
+			err:      []error{ErrMalformedData, ErrInvalidComponentIdentifier},
+		},
+		"query parameter with non-string name": {
+			values:   []string{`sig=("@query-param";name=foo)`},
+			expected: []SignatureRequest{},
+			err:      []error{ErrMalformedData, ErrInvalidComponentIdentifier},
+		},
 		"duplicate component identifier": {
 			values:      []string{`sig=("@method" "@method")`},
 			expected:    []SignatureRequest{},
