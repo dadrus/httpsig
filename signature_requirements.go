@@ -92,14 +92,14 @@ func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 		switch SignatureParameter(name) {
 		case Created:
 			value, ok := param.(bool)
-			if !ok {
+			if !ok || !value {
 				return fmt.Errorf("%w: created", ErrMalformedSignatureParameter)
 			}
 
 			p.created = value
 		case Expires:
 			value, ok := param.(bool)
-			if !ok {
+			if !ok || !value {
 				return fmt.Errorf("%w: expires", ErrMalformedSignatureParameter)
 			}
 

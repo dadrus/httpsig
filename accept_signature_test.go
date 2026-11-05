@@ -44,9 +44,24 @@ func TestParseAcceptSignature(t *testing.T) {
 				Expires:    true,
 			}},
 		},
-		"false boolean parameters": {
-			values:   []string{`sig=();created=?0;expires=?0`},
-			expected: []SignatureRequest{{Label: "sig", Components: []string{}}},
+		"false created flag": {
+			values:   []string{`sig=();created=?0`},
+			expected: []SignatureRequest{},
+			err:      []error{ErrMalformedData, ErrMalformedSignatureParameter},
+		},
+		"false expires flag": {
+			values:   []string{`sig=();expires=?0`},
+			expected: []SignatureRequest{},
+			err:      []error{ErrMalformedData, ErrMalformedSignatureParameter},
+		},
+		"explicit true boolean parameters": {
+			values: []string{`sig=();created=?1;expires=?1`},
+			expected: []SignatureRequest{{
+				Label:      "sig",
+				Components: []string{},
+				Created:    true,
+				Expires:    true,
+			}},
 		},
 		"component identifier parameters": {
 			values: []string{`sig=("content-digest";req "@query-param";name="a;b" "x-dict";key="k";sf)`},

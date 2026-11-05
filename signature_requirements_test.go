@@ -315,6 +315,40 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 			},
 		},
 		{
+			uc: "failing parsing false created parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), false)
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "created")
+			},
+		},
+		{
+			uc: "failing parsing false expires parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Expires), false)
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "expires")
+			},
+		},
+		{
 			uc: "failing parsing keyid parameter",
 			list: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
