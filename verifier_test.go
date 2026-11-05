@@ -1887,6 +1887,8 @@ func TestVerifierVerify(t *testing.T) {
 	} {
 		t.Run(uc, func(t *testing.T) {
 			withRFC9421Time(t, func(t *testing.T) {
+				t.Helper()
+
 				kr := NewKeyResolverMock(t)
 				tc.configureResolver(t, kr)
 

@@ -783,6 +783,8 @@ func TestSignerSign(t *testing.T) {
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			withRFC9421Time(t, func(t *testing.T) {
+				t.Helper()
+
 				s, err := NewSigner(tc.key, tc.opts...)
 				require.NoError(t, err)
 
@@ -795,6 +797,8 @@ func TestSignerSign(t *testing.T) {
 
 	t.Run("per-call label does not persist", func(t *testing.T) {
 		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
+
 			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
 				WithTTL(0),
 				WithLabel("static"),
@@ -813,6 +817,8 @@ func TestSignerSign(t *testing.T) {
 
 	t.Run("per-call nonce does not persist", func(t *testing.T) {
 		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
+
 			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")}, WithTTL(0))
 			require.NoError(t, err)
 
@@ -829,6 +835,8 @@ func TestSignerSign(t *testing.T) {
 
 	t.Run("per-call parameters do not persist", func(t *testing.T) {
 		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
+
 			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
 				WithTTL(0),
 			)
