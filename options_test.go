@@ -671,6 +671,18 @@ func TestWithMaxAge(t *testing.T) {
 	}
 }
 
+func TestWithoutMaxAge(t *testing.T) {
+	t.Parallel()
+
+	policy := &verificationPolicy{maxAge: new(30 * time.Second)}
+
+	err := WithoutMaxAge().applyVerifierOption(&verifier{}, policy, false)
+
+	require.NoError(t, err)
+	require.NotNil(t, policy.maxAge)
+	assert.Zero(t, *policy.maxAge)
+}
+
 func TestWithRequiredTag(t *testing.T) {
 	t.Parallel()
 

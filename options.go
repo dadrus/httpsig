@@ -394,6 +394,17 @@ func WithMaxAge(age time.Duration) VerifierOption {
 	})
 }
 
+// WithoutMaxAge disables the maximum age check for signatures with a created
+// timestamp. Checks for future created timestamps and signature expiration
+// remain active.
+func WithoutMaxAge() VerifierOption {
+	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
+		e.maxAge = new(time.Duration)
+
+		return nil
+	})
+}
+
 // WithRequiredTag specifies a required application-defined tag and its
 // per-tag verifier options. Each non-empty tag may be configured only once.
 func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {

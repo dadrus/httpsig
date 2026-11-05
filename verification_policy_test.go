@@ -57,91 +57,116 @@ func TestVerificationPolicyInherit(t *testing.T) {
 
 	globalIDs, err := toComponentIdentifiers([]string{"@method", "content-digest"})
 	require.NoError(t, err)
+	localIDs, err := toComponentIdentifiers([]string{"@status"})
+	require.NoError(t, err)
 
-	required := true
+	localBuilder := &AcceptSignatureBuilder{label: "custom"}
 	global := &verificationPolicy{
 		tolerance:           new(2 * time.Second),
 		maxAge:              new(30 * time.Second),
 		identifiers:         globalIDs,
-		reqCreatedTS:        &required,
-		reqExpiresTS:        &required,
+		reqCreatedTS:        new(true),
+		reqExpiresTS:        new(true),
 		asb:                 &AcceptSignatureBuilder{label: "sig"},
 		requiredParameters:  []SignatureParameter{Nonce},
 		forbiddenParameters: []SignatureParameter{Alg},
 		expectedParameters:  []parameterOption{{name: "audience", value: "service-a"}},
 	}
 
-	t.Run("inherits global configuration", func(t *testing.T) {
-		t.Parallel()
+	for uc, tc := range map[string]struct {
+		local  *verificationPolicy
+		assert func(t *testing.T, err error, local *verificationPolicy)
+	}{
+		"inherits global configuration": {
+			local: &verificationPolicy{},
+			assert: func(t *testing.T, err error, local *verificationPolicy) {
+				t.Helper()
 
-		local := &verificationPolicy{}
-		require.NoError(t, local.inherit(global, "profile"))
+				require.NoError(t, err)
+				assert.Equal(t, global.tolerance, local.tolerance)
+				assert.Equal(t, global.maxAge, local.maxAge)
+				assert.Equal(t, global.identifiers, local.identifiers)
+				assert.Equal(t, global.reqCreatedTS, local.reqCreatedTS)
+				assert.Equal(t, global.reqExpiresTS, local.reqExpiresTS)
+				assert.Equal(t, global.requiredParameters, local.requiredParameters)
+				assert.Equal(t, global.forbiddenParameters, local.forbiddenParameters)
+				assert.Equal(t, global.expectedParameters, local.expectedParameters)
 
-		assert.Equal(t, global.tolerance, local.tolerance)
-		assert.Equal(t, global.maxAge, local.maxAge)
-		assert.Equal(t, global.identifiers, local.identifiers)
-		assert.Equal(t, global.reqCreatedTS, local.reqCreatedTS)
-		assert.Equal(t, global.reqExpiresTS, local.reqExpiresTS)
-		assert.Equal(t, global.requiredParameters, local.requiredParameters)
-		assert.Equal(t, global.forbiddenParameters, local.forbiddenParameters)
-		assert.Equal(t, global.expectedParameters, local.expectedParameters)
+				require.NotSame(t, global.asb, local.asb)
+				assert.Equal(t, "profile", local.asb.tag)
+				assert.Empty(t, global.asb.tag)
+				assert.True(t, local.asb.wantContentDigest)
+				assert.True(t, local.asb.addCreatedTS)
+				assert.True(t, local.asb.addExpiresTS)
+			},
+		},
+		"keeps local overrides": {
+			local: &verificationPolicy{
+				tolerance:    new(time.Second),
+				maxAge:       new(5 * time.Second),
+				identifiers:  localIDs,
+				reqCreatedTS: new(false),
+				reqExpiresTS: new(false),
+				asb:          localBuilder,
+			},
+			assert: func(t *testing.T, err error, local *verificationPolicy) {
+				t.Helper()
 
-		require.NotSame(t, global.asb, local.asb)
-		assert.Equal(t, "profile", local.asb.tag)
-		assert.Empty(t, global.asb.tag)
-		assert.True(t, local.asb.wantContentDigest)
-		assert.True(t, local.asb.addCreatedTS)
-		assert.True(t, local.asb.addExpiresTS)
-	})
+				require.NoError(t, err)
+				require.NotNil(t, local.tolerance)
+				assert.Equal(t, time.Second, *local.tolerance)
+				require.NotNil(t, local.maxAge)
+				assert.Equal(t, 5*time.Second, *local.maxAge)
+				assert.Equal(t, localIDs, local.identifiers)
+				assert.False(t, *local.reqCreatedTS)
+				assert.False(t, *local.reqExpiresTS)
+				assert.Same(t, localBuilder, local.asb)
+				assert.Equal(t, "custom", local.asb.label)
+				assert.False(t, local.asb.wantContentDigest)
+				assert.False(t, local.asb.addCreatedTS)
+				assert.False(t, local.asb.addExpiresTS)
+			},
+		},
+		"local disablement overrides global max age": {
+			local: &verificationPolicy{maxAge: new(time.Duration)},
+			assert: func(t *testing.T, err error, local *verificationPolicy) {
+				t.Helper()
 
-	t.Run("keeps local overrides", func(t *testing.T) {
-		t.Parallel()
-
-		created := false
-		expires := false
-		localIDs, err := toComponentIdentifiers([]string{"@status"})
-		require.NoError(t, err)
-
-		localBuilder := &AcceptSignatureBuilder{label: "custom"}
-		local := &verificationPolicy{
-			tolerance:    new(time.Second),
-			maxAge:       new(5 * time.Second),
-			identifiers:  localIDs,
-			reqCreatedTS: &created,
-			reqExpiresTS: &expires,
-			asb:          localBuilder,
-		}
-		require.NoError(t, local.inherit(global, "profile"))
-
-		require.NotNil(t, local.tolerance)
-		assert.Equal(t, time.Second, *local.tolerance)
-		require.NotNil(t, local.maxAge)
-		assert.Equal(t, 5*time.Second, *local.maxAge)
-		assert.Equal(t, localIDs, local.identifiers)
-		assert.False(t, *local.reqCreatedTS)
-		assert.False(t, *local.reqExpiresTS)
-		assert.Same(t, localBuilder, local.asb)
-		assert.Equal(t, "custom", local.asb.label)
-		assert.False(t, local.asb.wantContentDigest)
-		assert.False(t, local.asb.addCreatedTS)
-		assert.False(t, local.asb.addExpiresTS)
-	})
-
-	for uc, local := range map[string]verificationPolicy{
+				require.NoError(t, err)
+				require.NotNil(t, local.maxAge)
+				assert.Zero(t, *local.maxAge)
+			},
+		},
 		"local requirement conflicts with global prohibition": {
-			requiredParameters: []SignatureParameter{Alg},
+			local: &verificationPolicy{requiredParameters: []SignatureParameter{Alg}},
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+			},
 		},
 		"local prohibition conflicts with global required parameter": {
-			forbiddenParameters: []SignatureParameter{Nonce},
+			local: &verificationPolicy{forbiddenParameters: []SignatureParameter{Nonce}},
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+			},
 		},
 		"local value conflicts with global expectation": {
-			expectedParameters: []parameterOption{{name: "audience", value: "other"}},
+			local: &verificationPolicy{expectedParameters: []parameterOption{{name: "audience", value: "other"}}},
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+			},
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			t.Parallel()
 
-			require.ErrorIs(t, local.inherit(global, "profile"), ErrParameter)
+			err := tc.local.inherit(global, "profile")
+			tc.assert(t, err, tc.local)
 		})
 	}
 }
@@ -292,6 +317,69 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, ErrValidity)
 				require.ErrorContains(t, err, "too old")
+			},
+		},
+		"old signature accepted without max age": {
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(-2*time.Minute).Unix())
+
+					return params
+				}(),
+			},
+			exp: verificationPolicy{
+				maxAge:       new(time.Duration),
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		"future created rejected without max age": {
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(2*time.Minute).Unix())
+
+					return params
+				}(),
+			},
+			exp: verificationPolicy{
+				maxAge:       new(time.Duration),
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrValidity)
+				require.ErrorContains(t, err, "not yet valid")
+			},
+		},
+		"expired signature rejected without max age": {
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), now.Add(-3*time.Minute).Unix())
+					params.Add(string(Expires), now.Add(-2*time.Minute).Unix())
+
+					return params
+				}(),
+			},
+			exp: verificationPolicy{
+				maxAge:       new(time.Duration),
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrValidity)
+				require.ErrorContains(t, err, "expired")
 			},
 		},
 		"expected component identifier has different parameter value": {
