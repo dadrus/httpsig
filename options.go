@@ -381,10 +381,14 @@ func WithValidityTolerance(tolerance time.Duration) VerifierOption {
 }
 
 // WithMaxAge specifies the maximum allowed age of a signature with a
-// created timestamp.
-func WithMaxAge(d time.Duration) VerifierOption {
+// created timestamp. The duration must be positive.
+func WithMaxAge(age time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
-		e.maxAge = d
+		if age <= 0 {
+			return fmt.Errorf("%w: max age must be positive", ErrParameter)
+		}
+
+		e.maxAge = &age
 
 		return nil
 	})
@@ -406,7 +410,7 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)
 		}
 
-		policy := &verificationPolicy{maxAge: -1}
+		policy := &verificationPolicy{}
 
 		for _, opt := range opts {
 			if err := opt.applyVerifierOption(ver, policy, true); err != nil {
