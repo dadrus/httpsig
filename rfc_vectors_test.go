@@ -1,5 +1,21 @@
 package httpsig
 
+import (
+	"testing"
+	"testing/synctest"
+	"time"
+)
+
+// withRFC9421Time runs an assertion at the timestamp used by RFC 9421 test vectors.
+func withRFC9421Time(t *testing.T, run func(*testing.T)) {
+	t.Helper()
+
+	synctest.Test(t, func(t *testing.T) {
+		time.Sleep(time.Until(time.Unix(1618884473, 0)))
+		run(t)
+	})
+}
+
 // from https://www.rfc-editor.org/rfc/rfc9421.html#name-example-rsa-pss-key
 // nolint: gochecknoglobals
 var (

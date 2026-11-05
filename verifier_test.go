@@ -465,9 +465,6 @@ func TestNewVerifier(t *testing.T) {
 }
 
 func TestVerifierVerify(t *testing.T) {
-	// used by RFC9421 in test vectors
-	currentTime = func() time.Time { return time.Unix(1618884473, 0) }
-
 	testURL, err := url.Parse("http://example.com/foo?param=Value&Pet=dog")
 	require.NoError(t, err)
 
@@ -1889,14 +1886,16 @@ func TestVerifierVerify(t *testing.T) {
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			kr := NewKeyResolverMock(t)
-			tc.configureResolver(t, kr)
+			withRFC9421Time(t, func(t *testing.T) {
+				kr := NewKeyResolverMock(t)
+				tc.configureResolver(t, kr)
 
-			v, err := NewVerifier(kr, tc.opts...)
-			require.NoError(t, err)
+				v, err := NewVerifier(kr, tc.opts...)
+				require.NoError(t, err)
 
-			results, err := v.Verify(tc.msg, tc.verifyOpts...)
-			tc.assert(t, err, results)
+				results, err := v.Verify(tc.msg, tc.verifyOpts...)
+				tc.assert(t, err, results)
+			})
 		})
 	}
 

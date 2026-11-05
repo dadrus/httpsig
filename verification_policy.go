@@ -254,7 +254,7 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 		mv                messageVerifier
 	)
 
-	now := currentTime().UTC()
+	now := time.Now().UTC()
 
 	expires, expiresPresent := si.expires()
 	if !expiresPresent {

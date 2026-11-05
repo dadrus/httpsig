@@ -153,7 +153,7 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 }
 
 func (s *signer) signatureInput(opts signOptions) *signatureInput {
-	created := currentTime().UTC()
+	created := time.Now().UTC()
 
 	params := httpsfv.NewParams()
 	params.Add(string(Created), created.Unix())
