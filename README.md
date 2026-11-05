@@ -197,6 +197,8 @@ nonce := ... // application-generated nonce for this request
 
 err = builder.Build(req.Context(), req.Header, httpsig.WithParameter("nonce", nonce))
 // error handling goes here
+
+// send the request
 ```
 
 This adds an `Accept-Signature` header with a value such as:
@@ -216,6 +218,8 @@ Use `ParseAcceptSignature` when a peer requests a signature, for example in a `4
 requests, err := httpsig.ParseAcceptSignature(resp.Header)
 // err reports the members that can't be used; requests holds the usable ones
 
+msg := httpsig.MessageFromRequest(req)
+
 for _, request := range requests {
     // decide whether the request is acceptable for your application
 
@@ -232,11 +236,15 @@ for _, request := range requests {
         opts = append(opts, httpsig.WithParameter("nonce", request.Nonce))
     }
 
-    header, err := signer.Sign(httpsig.MessageFromRequest(req), opts...)
+    _, err := signer.Sign(msg, opts...)
     // error handling goes here
 
     // ...
 }
+
+req.Header = msg.Header
+
+// send the request
 ```
 
 `Created` and `Expires` report whether these parameters are requested, as `Accept-Signature` carries no timestamp values. A `Signer` always includes `created`; use `WithTTL` to include `expires`. Parameters not defined by RFC 9421 are available in `Extensions`. If the field as a whole isn't valid Structured Fields, no requests are returned. A malformed member or one with an unsupported component identifier doesn't affect the other members: the usable requests are returned together with a joined error that wraps `ErrMalformedData` for each unusable member. Require `err == nil` if your application must fulfill every request.
