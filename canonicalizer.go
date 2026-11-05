@@ -192,13 +192,11 @@ func canonicalizeQueryParam(msg *Message, params *httpsfv.Params) ([]string, err
 	}
 
 	unescaped := query[name]
-
-	values := make([]string, len(unescaped))
-	for i, v := range unescaped {
-		values[i] = url.PathEscape(v)
+	if len(unescaped) > 1 {
+		return nil, fmt.Errorf("%w: query parameter '%s' occurs multiple times", ErrCanonicalization, name)
 	}
 
-	return values, nil
+	return []string{url.PathEscape(unescaped[0])}, nil
 }
 
 func canonicalizeStatusCode(msg *Message, params *httpsfv.Params) ([]string, error) {
