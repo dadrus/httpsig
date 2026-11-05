@@ -293,6 +293,19 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 				assert.Empty(t, hdr.Values(headerWantContentDigest))
 			},
 		},
+		"Want-Content-Digest is omitted after overriding covered components": {
+			opts: []AcceptSignatureOption{
+				WithComponents("@status", "content-digest"),
+				WithComponents("@method"),
+			},
+			assert: func(t *testing.T, err error, hdr http.Header) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, `sig=("@method");created;expires`, hdr.Get(headerAcceptSignature))
+				assert.Empty(t, hdr.Values(headerWantContentDigest))
+			},
+		},
 		"Accept-Signature and Want-Content-Digest headers are added with default algorithms": {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
