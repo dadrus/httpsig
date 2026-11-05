@@ -11,16 +11,15 @@ import (
 func TestQuoteIdentifierName(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		given  string
 		expect string
 	}{
-		{uc: "name already quoted", given: `"@method";req,key=val`, expect: `"@method";req,key=val`},
-		{uc: "name not quoted, without parameter", given: `@method`, expect: `"@method"`},
-		{uc: "name not quoted, with parameter", given: `@method;req,key=val`, expect: `"@method";req,key=val`},
+		"name already quoted":                {given: `"@method";req,key=val`, expect: `"@method";req,key=val`},
+		"name not quoted, without parameter": {given: `@method`, expect: `"@method"`},
+		"name not quoted, with parameter":    {given: `@method;req,key=val`, expect: `"@method";req,key=val`},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			res := quoteIdentifierName(tc.given)
 			assert.Equal(t, tc.expect, res)
 		})
@@ -30,18 +29,15 @@ func TestQuoteIdentifierName(t *testing.T) {
 func TestNormalizeParams(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		given  *httpsfv.Params
 		expect *httpsfv.Params
 	}{
-		{
-			uc:     "empty params",
+		"empty params": {
 			given:  httpsfv.NewParams(),
 			expect: httpsfv.NewParams(),
 		},
-		{
-			uc: "byte array params",
+		"byte array params": {
 			given: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add("test", []byte("test"))
@@ -55,8 +51,7 @@ func TestNormalizeParams(t *testing.T) {
 				return params
 			}(),
 		},
-		{
-			uc: "token params",
+		"token params": {
 			given: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add("test", httpsfv.Token("token"))
@@ -70,8 +65,7 @@ func TestNormalizeParams(t *testing.T) {
 				return params
 			}(),
 		},
-		{
-			uc: "bare item params",
+		"bare item params": {
 			given: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add("test", 1)
@@ -86,7 +80,7 @@ func TestNormalizeParams(t *testing.T) {
 			}(),
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			res := normaliseParams(tc.given)
 
 			assert.Equal(t, tc.given.Names(), res.Names())
@@ -107,13 +101,11 @@ func TestNormalizeParams(t *testing.T) {
 func TestToComponentIdentifiers(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc          string
+	for uc, tc := range map[string]struct {
 		identifiers []string
 		assert      func(t *testing.T, ci []*componentIdentifier, err error)
 	}{
-		{
-			uc:          "invalid identifier definition",
+		"invalid identifier definition": {
 			identifiers: []string{"foo;#"},
 			assert: func(t *testing.T, _ []*componentIdentifier, err error) {
 				t.Helper()
@@ -122,8 +114,7 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
 			},
 		},
-		{
-			uc:          "unknown identifier",
+		"unknown identifier": {
 			identifiers: []string{"@foo"},
 			assert: func(t *testing.T, _ []*componentIdentifier, err error) {
 				t.Helper()
@@ -132,14 +123,22 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 			},
 		},
-		{
-			uc:          "valid",
-			identifiers: []string{"@method;foo=bar", "@status"},
+		"content identifier must be lowercase": {
+			identifiers: []string{"Content-Digest"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"valid": {
+			identifiers: []string{"@method;foo=bar", "@status", `@query-param;name="Pet"`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
 				t.Helper()
 
 				require.NoError(t, err)
-				require.Len(t, ci, 2)
+				require.Len(t, ci, 3)
 
 				assert.Equal(t, "@method", ci[0].Value.(string))
 				res, ok := ci[0].Params.Get("foo")
@@ -150,10 +149,16 @@ func TestToComponentIdentifiers(t *testing.T) {
 				assert.Equal(t, "@status", ci[1].Value.(string))
 				assert.Empty(t, ci[1].Params.Names())
 				assert.NotNil(t, ci[1].c)
+
+				assert.Equal(t, "@query-param", ci[2].Value.(string))
+				res, ok = ci[2].Params.Get("name")
+				require.True(t, ok)
+				require.Equal(t, "Pet", res.(string))
+				assert.NotNil(t, ci[2].c)
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			res, err := toComponentIdentifiers(tc.identifiers)
 
 			tc.assert(t, res, err)
@@ -164,13 +169,11 @@ func TestToComponentIdentifiers(t *testing.T) {
 func TestNewComponentIdentifier(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc     string
+	for uc, tc := range map[string]struct {
 		item   httpsfv.Item
 		assert func(t *testing.T, ci *componentIdentifier, err error)
 	}{
-		{
-			uc:   "non-string component name",
+		"non-string component name": {
 			item: httpsfv.NewItem(int64(42)),
 			assert: func(t *testing.T, ci *componentIdentifier, err error) {
 				t.Helper()
@@ -179,8 +182,7 @@ func TestNewComponentIdentifier(t *testing.T) {
 				assert.Nil(t, ci)
 			},
 		},
-		{
-			uc:   "invalid",
+		"invalid": {
 			item: httpsfv.NewItem("@foo"),
 			assert: func(t *testing.T, _ *componentIdentifier, err error) {
 				t.Helper()
@@ -189,8 +191,7 @@ func TestNewComponentIdentifier(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 			},
 		},
-		{
-			uc: "valid",
+		"valid": {
 			item: func() httpsfv.Item {
 				item := httpsfv.NewItem("@method")
 				item.Params.Add("foo", []byte("bar"))
@@ -209,7 +210,7 @@ func TestNewComponentIdentifier(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			ci, err := newComponentIdentifier(tc.item)
 
 			tc.assert(t, ci, err)
@@ -220,14 +221,12 @@ func TestNewComponentIdentifier(t *testing.T) {
 func TestComponentIdentifierCreateComponent(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		uc   string
+	for uc, tc := range map[string]struct {
 		item httpsfv.Item
 		msg  *Message
 		err  error
 	}{
-		{
-			uc: "with error during canonicalization",
+		"with error during canonicalization": {
 			item: func() httpsfv.Item {
 				item := httpsfv.NewItem("@method")
 				item.Params.Add("req", true)
@@ -237,13 +236,12 @@ func TestComponentIdentifierCreateComponent(t *testing.T) {
 			msg: &Message{Method: "GET", IsRequest: true},
 			err: ErrCanonicalization,
 		},
-		{
-			uc:   "with error during canonicalization",
+		"successful": {
 			item: httpsfv.NewItem("@method"),
 			msg:  &Message{Method: "POST", IsRequest: true},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			ci, err := newComponentIdentifier(tc.item)
 			require.NoError(t, err)
 
