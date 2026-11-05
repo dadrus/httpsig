@@ -468,6 +468,7 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 		alg             SignatureAlgorithm
 		mutateMessage   func(t *testing.T, message []byte) []byte
 		mutateSignature func(t *testing.T, signature []byte) []byte
+		pssSaltLength   int
 		shouldError     bool
 	}{
 		"2048 key with RsaPkcs1v15Sha256": {
@@ -493,6 +494,30 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 		"4096 key with RsaPssSha512": {
 			key: pk4096,
 			alg: RsaPssSha512,
+		},
+		"RsaPssSha256 with short salt": {
+			key:           pk2048,
+			alg:           RsaPssSha256,
+			pssSaltLength: 1,
+			shouldError:   true,
+		},
+		"RsaPssSha384 with short salt": {
+			key:           pk3072,
+			alg:           RsaPssSha384,
+			pssSaltLength: 1,
+			shouldError:   true,
+		},
+		"RsaPssSha512 with short salt": {
+			key:           pk4096,
+			alg:           RsaPssSha512,
+			pssSaltLength: 1,
+			shouldError:   true,
+		},
+		"RsaPssSha512 with long salt": {
+			key:           pk4096,
+			alg:           RsaPssSha512,
+			pssSaltLength: 65,
+			shouldError:   true,
 		},
 		"signature is too short": {
 			shouldError: true,
@@ -555,6 +580,16 @@ func TestRSAVerifierVerifyPayload(t *testing.T) {
 			res, err := sig.sign(t.Context(), message)
 			require.NoError(t, err)
 			require.NotEmpty(t, res)
+
+			if tc.pssSaltLength > 0 {
+				hasher := sig.hash.New()
+				_, _ = hasher.Write(message)
+
+				res, err = rsa.SignPSS(rand.Reader, tc.key, sig.hash, hasher.Sum(nil), &rsa.PSSOptions{
+					SaltLength: tc.pssSaltLength,
+				})
+				require.NoError(t, err)
+			}
 
 			ver, err := newRSAVerifier(&tc.key.PublicKey, tc.alg)
 			require.NoError(t, err)
