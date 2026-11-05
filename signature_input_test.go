@@ -810,6 +810,15 @@ func TestSignatureInputHasIdentifier(t *testing.T) {
 			given:      []string{`x-test;value=1`},
 			identifier: `x-test;value="1"`,
 		},
+		"matching byte sequence parameter": {
+			given:      []string{`x-test;custom=:AQID:`},
+			identifier: `x-test;custom=:AQID:`,
+			expected:   true,
+		},
+		"different byte sequence parameter": {
+			given:      []string{`x-test;custom=:AQID:`},
+			identifier: `x-test;custom=:AQIE:`,
+		},
 		"different flag value": {
 			given:      []string{`x-test;sf=?0`},
 			identifier: `x-test;sf`,
