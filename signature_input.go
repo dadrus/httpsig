@@ -2,7 +2,6 @@ package httpsig
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/dunglas/httpsfv"
@@ -38,7 +37,22 @@ func newSignatureInput(
 
 func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
 	for _, identifier := range si.identifiers {
-		if identifier.Value == id.Value && slices.Equal(identifier.Params.Names(), id.Params.Names()) {
+		if identifier.Value != id.Value || len(identifier.Params.Names()) != len(id.Params.Names()) {
+			continue
+		}
+
+		matches := true
+		for _, name := range id.Params.Names() {
+			actual, present := identifier.Params.Get(name)
+			expected, _ := id.Params.Get(name)
+			if !present || actual != expected {
+				matches = false
+
+				break
+			}
+		}
+
+		if matches {
 			return true
 		}
 	}
