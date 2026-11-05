@@ -71,7 +71,7 @@ func newSignatureRequirements(
 	}
 }
 
-//nolint:funlen, cyclop
+//nolint:funlen, cyclop, gocognit
 func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 	for _, item := range list.Items {
 		ci, err := newComponentIdentifier(item)
