@@ -187,17 +187,8 @@ func canonicalizeQueryParam(msg *Message, params *httpsfv.Params) ([]string, err
 		return nil, err
 	}
 
-	val, ok := params.Get("name")
-	if !ok {
-		return nil, fmt.Errorf("%w: %w: @query-param must have a named parameter",
-			ErrCanonicalization, ErrInvalidComponentIdentifier)
-	}
-
-	name, ok := val.(string)
-	if !ok {
-		return nil, fmt.Errorf("%w: %w: @query-param 'name' must be a string",
-			ErrCanonicalization, ErrInvalidComponentIdentifier)
-	}
+	val, _ := params.Get("name")
+	name := val.(string) //nolint: forcetypeassert
 
 	query := msg.queryParams()
 	if !query.Has(name) {
