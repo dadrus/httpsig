@@ -52,14 +52,12 @@ func TestCanonicalization(t *testing.T) {
 	testURL1, err := url.Parse(url1)
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		uc         string
+	for uc, tc := range map[string]struct {
 		identifier string
 		message    *Message
 		assert     func(t *testing.T, err error, value []string)
 	}{
-		{
-			uc:         "@method for request - valid",
+		"@method for request - valid": {
 			identifier: `"@method"`,
 			message:    &Message{Method: http.MethodGet, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -69,8 +67,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{http.MethodGet}, value)
 			},
 		},
-		{
-			uc:         "@method for request - invalid",
+		"@method for request - invalid": {
 			identifier: `"@method";req`,
 			message:    &Message{Method: http.MethodGet, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -81,8 +78,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@method for response - valid",
+		"@method for response - valid": {
 			identifier: `"@method";req`,
 			message:    &Message{Method: http.MethodPost, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -92,8 +88,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{http.MethodPost}, value)
 			},
 		},
-		{
-			uc:         "@method for response - invalid",
+		"@method for response - invalid": {
 			identifier: `"@method"`,
 			message:    &Message{Method: http.MethodGet, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -104,8 +99,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@method not valid for responses")
 			},
 		},
-		{
-			uc:         "@target-uri for request - valid",
+		"@target-uri for request - valid": {
 			identifier: `"@target-uri"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -115,8 +109,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{url1}, value)
 			},
 		},
-		{
-			uc:         "@target-uri for request - invalid",
+		"@target-uri for request - invalid": {
 			identifier: `"@target-uri";req`,
 			message:    &Message{Method: http.MethodGet, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -127,8 +120,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@target-uri for response - valid",
+		"@target-uri for response - valid": {
 			identifier: `"@target-uri";req`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -138,8 +130,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{url1}, value)
 			},
 		},
-		{
-			uc:         "@target-uri for response - invalid",
+		"@target-uri for response - invalid": {
 			identifier: `"@target-uri"`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -150,8 +141,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@target-uri not valid for responses")
 			},
 		},
-		{
-			uc:         "@authority for request - valid http without port",
+		"@authority for request - valid http without port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -161,8 +151,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - valid https without port",
+		"@authority for request - valid https without port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "https"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -172,8 +161,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - valid http with default port",
+		"@authority for request - valid http with default port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com:80", URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -183,8 +171,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - valid https with default port",
+		"@authority for request - valid https with default port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com:443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -194,8 +181,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - valid http with custom port",
+		"@authority for request - valid http with custom port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com:8080", URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -205,8 +191,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com:8080"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - valid https with custom port",
+		"@authority for request - valid https with custom port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com:8443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -216,8 +201,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com:8443"}, value)
 			},
 		},
-		{
-			uc:         "@authority for request - invalid",
+		"@authority for request - invalid": {
 			identifier: `"@authority";req`,
 			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -228,8 +212,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@authority for response - valid",
+		"@authority for response - valid": {
 			identifier: `"@authority";req`,
 			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "http"}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -239,8 +222,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Equal(t, []string{"example.com"}, value)
 			},
 		},
-		{
-			uc:         "@authority for response - invalid",
+		"@authority for response - invalid": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "http"}, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -249,8 +231,7 @@ func TestCanonicalization(t *testing.T) {
 				require.Error(t, err)
 			},
 		},
-		{
-			uc:         "@scheme for request - valid",
+		"@scheme for request - valid": {
 			identifier: `"@scheme"`,
 			message:    &Message{URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -260,8 +241,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"http"}, value)
 			},
 		},
-		{
-			uc:         "@scheme for request - invalid",
+		"@scheme for request - invalid": {
 			identifier: `"@scheme";req`,
 			message:    &Message{URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -272,8 +252,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@scheme for response - valid",
+		"@scheme for response - valid": {
 			identifier: `"@scheme";req`,
 			message:    &Message{URL: &url.URL{Scheme: "https"}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -283,8 +262,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"https"}, value)
 			},
 		},
-		{
-			uc:         "@scheme for response - invalid",
+		"@scheme for response - invalid": {
 			identifier: `"@scheme"`,
 			message:    &Message{URL: &url.URL{Scheme: "https"}, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -295,8 +273,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@scheme not valid for responses")
 			},
 		},
-		{
-			uc:         "@request-target for request - valid",
+		"@request-target for request - valid": {
 			identifier: `"@request-target"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -306,8 +283,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"/foo%2Fbaz/bar%5Bid%5D?foo=bar&bar=%5Bid%5D"}, value)
 			},
 		},
-		{
-			uc:         "@request-target for request - invalid",
+		"@request-target for request - invalid": {
 			identifier: `"@request-target";req`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -318,8 +294,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@request-target for response - valid",
+		"@request-target for response - valid": {
 			identifier: `"@request-target";req`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -329,8 +304,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"/foo%2Fbaz/bar%5Bid%5D?foo=bar&bar=%5Bid%5D"}, value)
 			},
 		},
-		{
-			uc:         "@request-target for response - invalid",
+		"@request-target for response - invalid": {
 			identifier: `"@request-target"`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -341,8 +315,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@request-target not valid for responses")
 			},
 		},
-		{
-			uc:         "@path for request - valid without leading slash",
+		"@path for request - valid without leading slash": {
 			identifier: `"@path"`,
 			message:    &Message{URL: &url.URL{Path: "foo"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -352,8 +325,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"/foo"}, value)
 			},
 		},
-		{
-			uc:         "@path for request - valid with leading slash",
+		"@path for request - valid with leading slash": {
 			identifier: `"@path"`,
 			message:    &Message{URL: &url.URL{Path: "/foo"}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -363,8 +335,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"/foo"}, value)
 			},
 		},
-		{
-			uc:         "@path for request - invalid",
+		"@path for request - invalid": {
 			identifier: `"@path";req`,
 			message:    &Message{URL: &url.URL{Path: "/foo"}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -375,8 +346,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@path for response - valid",
+		"@path for response - valid": {
 			identifier: `"@path";req`,
 			message:    &Message{URL: &url.URL{Path: "/bar"}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -386,8 +356,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"/bar"}, value)
 			},
 		},
-		{
-			uc:         "@path for response - invalid",
+		"@path for response - invalid": {
 			identifier: `"@path"`,
 			message:    &Message{URL: &url.URL{Path: "/bar"}, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -398,8 +367,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@path not valid for responses")
 			},
 		},
-		{
-			uc:         "@query for request - valid with query present",
+		"@query for request - valid with query present": {
 			identifier: `"@query"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -409,8 +377,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"?foo=bar&bar=%5Bid%5D"}, value)
 			},
 		},
-		{
-			uc:         "@query for request - valid without query",
+		"@query for request - valid without query": {
 			identifier: `"@query"`,
 			message:    &Message{URL: &url.URL{}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -420,8 +387,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"?"}, value)
 			},
 		},
-		{
-			uc:         "@query for request - invalid",
+		"@query for request - invalid": {
 			identifier: `"@query";req`,
 			message:    &Message{URL: &url.URL{}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -432,8 +398,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "is not valid for requests")
 			},
 		},
-		{
-			uc:         "@query for response - valid",
+		"@query for response - valid": {
 			identifier: `"@query";req`,
 			message:    &Message{URL: &url.URL{}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -443,8 +408,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"?"}, value)
 			},
 		},
-		{
-			uc:         "@query for response - invalid",
+		"@query for response - invalid": {
 			identifier: `"@query"`,
 			message:    &Message{URL: &url.URL{}, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -455,8 +419,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "@query not valid for responses")
 			},
 		},
-		{
-			uc:         "@query-param for request - valid",
+		"@query-param for request - valid": {
 			identifier: `"@query-param";name=bar`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -466,8 +429,47 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"%5Bid%5D"}, value)
 			},
 		},
-		{
-			uc:         "@query-param for request - invalid, without required name parameter",
+		"@query-param for request - valid with duplicate unrelated parameter": {
+			identifier: `"@query-param";name=foo`,
+			message:    &Message{URL: &url.URL{RawQuery: "foo=bar&other=one&other=two"}, IsRequest: true},
+			assert: func(t *testing.T, err error, value []string) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, []string{"bar"}, value)
+			},
+		},
+		"@query-param for request - invalid, duplicate parameter": {
+			identifier: `"@query-param";name=foo`,
+			message:    &Message{URL: &url.URL{RawQuery: "foo=one&foo=two"}, IsRequest: true},
+			assert: func(t *testing.T, err error, _ []string) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorContains(t, err, "occurs multiple times")
+			},
+		},
+		"@query-param for request - invalid, duplicate encoded parameter": {
+			identifier: `"@query-param";name=foo`,
+			message:    &Message{URL: &url.URL{RawQuery: "foo=one&%66oo=two"}, IsRequest: true},
+			assert: func(t *testing.T, err error, _ []string) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorContains(t, err, "occurs multiple times")
+			},
+		},
+		"@query-param for response - invalid, duplicate request parameter": {
+			identifier: `"@query-param";name=foo;req`,
+			message:    &Message{URL: &url.URL{RawQuery: "foo=one&foo=two"}, IsRequest: false},
+			assert: func(t *testing.T, err error, _ []string) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrCanonicalization)
+				require.ErrorContains(t, err, "occurs multiple times")
+			},
+		},
+		"@query-param for request - invalid, without required name parameter": {
 			identifier: `"@query-param"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -478,8 +480,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "named parameter")
 			},
 		},
-		{
-			uc:         "@query-param for request - invalid query param escaping",
+		"@query-param for request - invalid query param escaping": {
 			identifier: `"@query-param";name=1`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -490,8 +491,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "must be a string")
 			},
 		},
-		{
-			uc:         "@query-param for request - invalid, parameter not present in query",
+		"@query-param for request - invalid, parameter not present in query": {
 			identifier: `"@query-param";name=moo`,
 			message:    &Message{URL: testURL1, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -502,8 +502,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "not found")
 			},
 		},
-		{
-			uc:         "@query-param for response - valid",
+		"@query-param for response - valid": {
 			identifier: `"@query-param";name=foo;req`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -513,8 +512,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"bar"}, value)
 			},
 		},
-		{
-			uc:         "@query-param for response - invalid",
+		"@query-param for response - invalid": {
 			identifier: `"@query-param";name=foo`,
 			message:    &Message{URL: testURL1, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -525,8 +523,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "not valid for responses")
 			},
 		},
-		{
-			uc:         "@status for response - valid",
+		"@status for response - valid": {
 			identifier: `"@status"`,
 			message:    &Message{StatusCode: http.StatusNotFound, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -536,8 +533,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"404"}, value)
 			},
 		},
-		{
-			uc:         "@status for response - invalid",
+		"@status for response - invalid": {
 			identifier: `"@status";req`,
 			message:    &Message{StatusCode: http.StatusNotFound, IsRequest: false},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -548,8 +544,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "not valid for requests")
 			},
 		},
-		{
-			uc:         "@status for request - invalid",
+		"@status for request - invalid": {
 			identifier: `"@status"`,
 			message:    &Message{StatusCode: http.StatusNotFound, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -560,8 +555,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "not valid for requests")
 			},
 		},
-		{
-			uc:         "header component for request - invalid, no header present",
+		"header component for request - invalid, no header present": {
 			identifier: `"X-Foo-Bar"`,
 			message:    &Message{IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -572,8 +566,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "x-foo-bar not present in message")
 			},
 		},
-		{
-			uc:         "header component for request - invalid, specified header not present",
+		"header component for request - invalid, specified header not present": {
 			identifier: `"X-Foo-Bar"`,
 			message:    &Message{Header: http.Header{"Accept": []string{"application/json"}}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -584,8 +577,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "x-foo-bar not present in message")
 			},
 		},
-		{
-			uc:         "header component for request - invalid, bad serialization settings",
+		"header component for request - invalid, bad serialization settings": {
 			identifier: `"X-Foo-Bar";bs;sf`,
 			message:    &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -596,8 +588,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "cannot have both")
 			},
 		},
-		{
-			uc:         "header component for request - invalid, serialization error",
+		"header component for request - invalid, serialization error": {
 			identifier: `"X-Foo-Bar";sf;key=foo`,
 			message:    &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: true},
 			assert: func(t *testing.T, err error, _ []string) {
@@ -608,8 +599,7 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "unable to parse")
 			},
 		},
-		{
-			uc:         "header component for request - valid",
+		"header component for request - valid": {
 			identifier: `"X-Foo-Bar"`,
 			message:    &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: true},
 			assert: func(t *testing.T, err error, value []string) {
@@ -619,8 +609,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"baz"}, value)
 			},
 		},
-		{
-			uc:         "header component for response - valid",
+		"header component for response - valid": {
 			identifier: `"X-Foo-Bar"`,
 			message:    &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -630,8 +619,7 @@ func TestCanonicalization(t *testing.T) {
 				assert.Equal(t, []string{"baz"}, value)
 			},
 		},
-		{
-			uc:         "header component for response from request - valid",
+		"header component for response from request - valid": {
 			identifier: `"X-Foo-Bar";req`,
 			message:    &Message{RequestHeader: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: false},
 			assert: func(t *testing.T, err error, value []string) {
@@ -642,7 +630,7 @@ func TestCanonicalization(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			item, err := httpsfv.UnmarshalItem([]string{tc.identifier})
 			require.NoError(t, err)
 
