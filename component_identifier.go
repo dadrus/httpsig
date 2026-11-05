@@ -108,6 +108,15 @@ func (c *componentIdentifier) equal(other *componentIdentifier) bool {
 	return true
 }
 
+func (c *componentIdentifier) createComponent(msg *Message) (component, error) {
+	values, err := c.c.canonicalize(msg, c.Params)
+	if err != nil {
+		return component{}, err
+	}
+
+	return component{key: c, value: values}, nil
+}
+
 func equalComponentParameterValues(actual, expected any) bool {
 	if expectedBytes, ok := expected.([]byte); ok {
 		actualBytes, ok := actual.([]byte)
@@ -116,13 +125,4 @@ func equalComponentParameterValues(actual, expected any) bool {
 	}
 
 	return actual == expected
-}
-
-func (c *componentIdentifier) createComponent(msg *Message) (component, error) {
-	values, err := c.c.canonicalize(msg, c.Params)
-	if err != nil {
-		return component{}, err
-	}
-
-	return component{key: c, value: values}, nil
 }
