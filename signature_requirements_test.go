@@ -387,21 +387,26 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 			},
 		},
 		{
-			uc: "failing parsing unknown parameter",
+			uc: "collecting extension parameters",
 			list: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
 					params := httpsfv.NewParams()
-					params.Add("foo", 1)
+					params.Add("foo", int64(1))
+					params.Add("token", httpsfv.Token("bar"))
+					params.Add("display", httpsfv.DisplayString("baz"))
 
 					return params
 				}(),
 			},
-			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+			assert: func(t *testing.T, err error, params *signatureRequirements) {
 				t.Helper()
 
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
-				require.ErrorContains(t, err, "foo is unknown")
+				require.NoError(t, err)
+				assert.Equal(t, SignatureParameters{
+					"foo":     int64(1),
+					"token":   Token("bar"),
+					"display": "baz",
+				}, params.extensions)
 			},
 		},
 		{

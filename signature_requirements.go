@@ -16,6 +16,7 @@ type signatureRequirements struct {
 	keyID       string
 	tag         string
 	identifiers []*componentIdentifier
+	extensions  SignatureParameters
 }
 
 func newSignatureRequirements(
@@ -127,7 +128,11 @@ func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 
 			p.tag = value
 		default:
-			return fmt.Errorf("%w: %s is unknown", ErrMalformedSignatureParameter, name)
+			if p.extensions == nil {
+				p.extensions = make(SignatureParameters)
+			}
+
+			p.extensions[SignatureParameter(name)] = decodeParameter(param)
 		}
 	}
 

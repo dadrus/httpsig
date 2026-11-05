@@ -208,6 +208,39 @@ Want-Content-Digest: sha-256=2
 
 The `Want-Content-Digest` header is also added because the requested signature covers `content-digest`.
 
+#### Fulfilling a Signature Request
+
+Use `ParseAcceptSignature` when a peer requests a signature, for example in a `401` response to your request. It takes an `http.Header`, so it works independently of signers and verifiers, and returns one `SignatureRequest` per requested signature:
+
+```go
+requests, err := httpsig.ParseAcceptSignature(resp.Header)
+// err reports the members that can't be used; requests holds the usable ones
+
+for _, request := range requests {
+    // decide whether the request is acceptable for your application
+
+    signer, err := httpsig.NewSigner(
+        key,
+        httpsig.WithLabel(request.Label),
+        httpsig.WithComponents(request.Components...),
+        httpsig.WithTag(request.Tag),
+    )
+    // error handling goes here
+
+    var opts []httpsig.SignOption
+    if request.Nonce != "" {
+        opts = append(opts, httpsig.WithParameter("nonce", request.Nonce))
+    }
+
+    header, err := signer.Sign(httpsig.MessageFromRequest(req), opts...)
+    // error handling goes here
+
+    // ...
+}
+```
+
+`Created` and `Expires` report whether these parameters are requested, as `Accept-Signature` carries no timestamp values. A `Signer` always includes `created`; use `WithTTL` to include `expires`. Parameters not defined by RFC 9421 are available in `Extensions`. If the field as a whole isn't valid Structured Fields, no requests are returned. A malformed member or one with an unsupported component identifier doesn't affect the other members: the usable requests are returned together with a joined error that wraps `ErrMalformedData` for each unusable member. Require `err == nil` if your application must fulfill every request.
+
 #### Requesting Signatures on the Server-Side from the Client
 
 On the server side, the `Verifier` can derive `Accept-Signature` requirements from its configured policy. This avoids defining component and parameter requirements separately for verification and negotiation. If a required signature, component, or parameter is missing, `Verify` returns an error wrapping `NoApplicableSignatureError`; use `errors.As` to retrieve it and call `Negotiate` to add the prepared headers to the response. An invalid cryptographic signature is still a verification failure, not a negotiation request.
@@ -471,6 +504,7 @@ app.Use(func(c fiber.Ctx) error {
 
 * **Coverage:** Require the components your application relies on. For messages with bodies, sign and verify `content-digest` when body integrity matters.
 * **Key trust:** `KeyResolver` receives unverified message data. Select and validate keys according to your application protocol.
+* **Signature requests:** `Accept-Signature` is controlled by the peer. Check the components, key, and parameters of a `SignatureRequest` before signing, so a peer cannot obtain signatures your application did not intend to produce.
 * **Replay:** Enforce the required nonce checks after successful signature verification.
 * **Multiple signatures:** Labels are not signed, and `VerificationResult` has no defined order. Choose the required tags or validate all signatures as appropriate.
 

@@ -56,17 +56,21 @@ func (si *signatureInput) parameters() SignatureParameters {
 	for _, name := range si.value.Params.Names() {
 		value, _ := si.value.Params.Get(name)
 
-		switch v := value.(type) {
-		case httpsfv.Token:
-			value = Token(v)
-		case httpsfv.DisplayString:
-			value = string(v)
-		}
-
-		result[SignatureParameter(name)] = value
+		result[SignatureParameter(name)] = decodeParameter(value)
 	}
 
 	return result
+}
+
+func decodeParameter(value any) any {
+	switch v := value.(type) {
+	case httpsfv.Token:
+		return Token(v)
+	case httpsfv.DisplayString:
+		return string(v)
+	default:
+		return value
+	}
 }
 
 func (si *signatureInput) parameter(name SignatureParameter) (any, bool) {
