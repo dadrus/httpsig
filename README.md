@@ -18,6 +18,16 @@ For API details and option semantics, see the [Go reference](https://pkg.go.dev/
 
 ## Usage
 
+> [!NOTE]
+> Component identifiers are represented as [Structured Fields Items](https://www.rfc-editor.org/rfc/rfc9421.html#section-2.5), with quoted component names (for example, `"@method"` or `"content-digest";req`). For convenience, configuration options such as `WithComponents` also accept a simplified form that omits the quotes around the component name. Both forms are equivalent:
+>
+> ```go
+> httpsig.WithComponents(`"@method"`, `"content-digest";req`) // Structured Fields form
+> httpsig.WithComponents("@method", "content-digest;req")     // simplified form
+> ```
+>
+> When parsing an `Accept-Signature` header, `httpsig` returns the serialized Structured Fields form in `SignatureRequest.Components`. These values can be passed directly to `WithComponents`.
+
 ### Standalone Signing and Verification
 
 The following snippets show two independent flows: signing an outgoing request and verifying a received response. They assume application-provided keys and other values; routine error handling is abbreviated.
@@ -652,7 +662,6 @@ See also [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc94
 Following are the known limitations and deviations:
 
 - **HTTP trailers:** The `;tr` component identifier parameter is not supported. `Signature` and `Signature-Input` fields cannot be processed as trailers.
-- **Signature negotiation:** Generating `Accept-Signature` is supported, but parsing received `Accept-Signature` fields is not yet implemented.
 
 ### Other Limitations
 
