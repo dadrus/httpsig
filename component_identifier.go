@@ -121,7 +121,7 @@ func isValidHTTPFieldName(name string) bool {
 		return false
 	}
 
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		ch := name[i]
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
 			(ch >= '0' && ch <= '9') || strings.IndexByte("!#$%&'*+-.^_`|~", ch) >= 0 {
