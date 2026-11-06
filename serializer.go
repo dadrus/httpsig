@@ -12,7 +12,7 @@ import (
 var errSerialization = errors.New("serialization error")
 
 //nolint:gochecknoglobals
-var byteSequenceWhitespace = regexp.MustCompile(`\s+`)
+var byteSequenceObsFold = regexp.MustCompile("[ \t]*\r\n[ \t]+")
 
 type serializer interface {
 	serialize(v []string) ([]string, error)
@@ -51,12 +51,11 @@ func (s *byteSequenceSerializer) serialize(v []string) ([]string, error) {
 	encoded := make([]string, len(v))
 
 	for i, sv := range v {
-		values := strings.Split(sv, ",")
-		for j, v := range values {
-			values[j] = byteSequenceWhitespace.ReplaceAllString(strings.TrimSpace(v), " ")
-		}
-
-		item := httpsfv.NewItem([]byte(strings.Join(values, ", ")))
+		// RFC 9421, Section 2.1.3: preserve field-value bytes except for
+		// surrounding HTTP whitespace and obsolete line folding.
+		value := strings.Trim(sv, " \t")
+		value = byteSequenceObsFold.ReplaceAllString(value, " ")
+		item := httpsfv.NewItem([]byte(value))
 
 		marshalled, err := httpsfv.Marshal(item)
 		if err != nil {
