@@ -106,6 +106,30 @@ func TestToComponentIdentifiers(t *testing.T) {
 	}
 }
 
+func TestIsValidHTTPFieldName(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		name  string
+		valid bool
+	}{
+		"lowercase field name":      {name: "content-type", valid: true},
+		"uppercase field name":      {name: "Content-Type", valid: true},
+		"all permitted punctuation": {name: "!#$%&'*+-.^_`|~", valid: true},
+		"empty name":                {name: ""},
+		"space":                     {name: "bad name"},
+		"colon":                     {name: ":authority"},
+		"slash":                     {name: "bad/name"},
+		"at sign":                   {name: "name@other"},
+		"non-ASCII":                 {name: "caf\u00e9"},
+		"control character":         {name: "bad\nname"},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			assert.Equal(t, tc.valid, isValidHTTPFieldName(tc.name))
+		})
+	}
+}
+
 func TestNewComponentIdentifier(t *testing.T) {
 	t.Parallel()
 
@@ -138,6 +162,24 @@ func TestNewComponentIdentifier(t *testing.T) {
 
 				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
 				assert.Nil(t, ci)
+			},
+		},
+		"invalid HTTP field name": {
+			item: httpsfv.NewItem("bad name"),
+			assert: func(t *testing.T, ci *componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"valid HTTP field name": {
+			item: httpsfv.NewItem("x_test"),
+			assert: func(t *testing.T, ci *componentIdentifier, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.NotNil(t, ci.c)
 			},
 		},
 		"valid": {

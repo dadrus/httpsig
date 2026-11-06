@@ -65,6 +65,10 @@ func newComponentIdentifier(item httpsfv.Item) (*componentIdentifier, error) {
 		return nil, fmt.Errorf("%w: component name %q must be lowercase", ErrInvalidComponentIdentifier, name)
 	}
 
+	if !strings.HasPrefix(name, "@") && !isValidHTTPFieldName(name) {
+		return nil, fmt.Errorf("%w: invalid HTTP field name %q", ErrInvalidComponentIdentifier, name)
+	}
+
 	canonicalizer, err := canonicalizerFor(name, item.Params)
 	if err != nil {
 		return nil, err
@@ -109,4 +113,23 @@ func equalComponentParameterValues(actual, expected any) bool {
 	}
 
 	return actual == expected
+}
+
+// HTTP field names follow the token syntax of RFC 9110, Section 5.1.
+func isValidHTTPFieldName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || strings.IndexByte("!#$%&'*+-.^_`|~", ch) >= 0 {
+			continue
+		}
+
+		return false
+	}
+
+	return true
 }
