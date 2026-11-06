@@ -1,8 +1,8 @@
 package httpsig
 
 import (
-	"bytes"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/dunglas/httpsfv"
@@ -37,30 +37,7 @@ func newSignatureInput(
 }
 
 func (si *signatureInput) hasIdentifier(id *componentIdentifier) bool {
-	for _, identifier := range si.identifiers {
-		if identifier.Value != id.Value || len(identifier.Params.Names()) != len(id.Params.Names()) {
-			continue
-		}
-
-		matches := true
-
-		for _, name := range id.Params.Names() {
-			actual, present := identifier.Params.Get(name)
-
-			expected, _ := id.Params.Get(name)
-			if !present || !equalComponentParameterValues(actual, expected) {
-				matches = false
-
-				break
-			}
-		}
-
-		if matches {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(si.identifiers, id.equal)
 }
 
 func (si *signatureInput) parameters() SignatureParameters {
@@ -73,17 +50,21 @@ func (si *signatureInput) parameters() SignatureParameters {
 	for _, name := range si.value.Params.Names() {
 		value, _ := si.value.Params.Get(name)
 
-		switch v := value.(type) {
-		case httpsfv.Token:
-			value = Token(v)
-		case httpsfv.DisplayString:
-			value = string(v)
-		}
-
-		result[SignatureParameter(name)] = value
+		result[SignatureParameter(name)] = decodeParameter(value)
 	}
 
 	return result
+}
+
+func decodeParameter(value any) any {
+	switch v := value.(type) {
+	case httpsfv.Token:
+		return Token(v)
+	case httpsfv.DisplayString:
+		return string(v)
+	default:
+		return value
+	}
 }
 
 func (si *signatureInput) parameter(name SignatureParameter) (any, bool) {
@@ -167,14 +148,4 @@ func validateSignatureInputParameters(params *httpsfv.Params) error {
 	}
 
 	return nil
-}
-
-func equalComponentParameterValues(actual, expected any) bool {
-	if expectedBytes, ok := expected.([]byte); ok {
-		actualBytes, ok := actual.([]byte)
-
-		return ok && bytes.Equal(actualBytes, expectedBytes)
-	}
-
-	return actual == expected
 }

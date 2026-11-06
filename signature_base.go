@@ -2,6 +2,7 @@ package httpsig
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/dunglas/httpsfv"
@@ -34,7 +35,6 @@ func newSignatureBase(msg *Message, si *signatureInput, prepared []string) (sign
 		entries:         make([]serializedComponent, 0, len(si.identifiers)),
 		signatureParams: marshalledSigParams,
 	}
-	seen := make(map[string]struct{}, len(si.identifiers))
 
 	for i, ci := range si.identifiers {
 		var identifier string
@@ -47,11 +47,9 @@ func newSignatureBase(msg *Message, si *signatureInput, prepared []string) (sign
 			identifier = prepared[i]
 		}
 
-		if _, ok := seen[identifier]; ok {
+		if slices.ContainsFunc(si.identifiers[:i], ci.equal) {
 			return signatureBase{}, fmt.Errorf("%w: duplicate component identifier %s", ErrMalformedData, identifier)
 		}
-
-		seen[identifier] = struct{}{}
 
 		comp, err := ci.createComponent(msg)
 		if err != nil {

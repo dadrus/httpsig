@@ -52,7 +52,7 @@ func assertParameter(name string, params *httpsfv.Params, isRequest bool) error 
 }
 
 //nolint:cyclop
-func canonicalizerFor(name string) (canonicalizer, error) {
+func canonicalizerFor(name string, params *httpsfv.Params) (canonicalizer, error) {
 	switch name {
 	case "@method":
 		return canonicalizerFunc(canonicalizeMethod), nil
@@ -69,6 +69,19 @@ func canonicalizerFor(name string) (canonicalizer, error) {
 	case "@query":
 		return canonicalizerFunc(canonicalizeQuery), nil
 	case "@query-param":
+		if params == nil {
+			return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
+		}
+
+		value, present := params.Get("name")
+		if !present {
+			return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
+		}
+
+		if _, ok := value.(string); !ok {
+			return nil, fmt.Errorf("%w: @query-param 'name' must be a string", ErrInvalidComponentIdentifier)
+		}
+
 		return canonicalizerFunc(canonicalizeQueryParam), nil
 	case "@status":
 		return canonicalizerFunc(canonicalizeStatusCode), nil
@@ -174,17 +187,8 @@ func canonicalizeQueryParam(msg *Message, params *httpsfv.Params) ([]string, err
 		return nil, err
 	}
 
-	val, ok := params.Get("name")
-	if !ok {
-		return nil, fmt.Errorf("%w: %w: @query-param must have a named parameter",
-			ErrCanonicalization, ErrInvalidComponentIdentifier)
-	}
-
-	name, ok := val.(string)
-	if !ok {
-		return nil, fmt.Errorf("%w: %w: @query-param 'name' must be a string",
-			ErrCanonicalization, ErrInvalidComponentIdentifier)
-	}
+	val, _ := params.Get("name")
+	name := val.(string) //nolint: forcetypeassert
 
 	query := msg.queryParams()
 	if !query.Has(name) {

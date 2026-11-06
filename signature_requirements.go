@@ -2,6 +2,7 @@ package httpsig
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -16,6 +17,7 @@ type signatureRequirements struct {
 	keyID       string
 	tag         string
 	identifiers []*componentIdentifier
+	extensions  SignatureParameters
 }
 
 func newSignatureRequirements(
@@ -69,12 +71,16 @@ func newSignatureRequirements(
 	}
 }
 
-//nolint:funlen, cyclop
+//nolint:funlen, cyclop, gocognit
 func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 	for _, item := range list.Items {
 		ci, err := newComponentIdentifier(item)
 		if err != nil {
 			return err
+		}
+
+		if slices.ContainsFunc(p.identifiers, ci.equal) {
+			return fmt.Errorf("%w: duplicate component identifier %q", ErrMalformedData, ci.Value)
 		}
 
 		p.identifiers = append(p.identifiers, ci)
@@ -86,48 +92,52 @@ func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 		switch SignatureParameter(name) {
 		case Created:
 			value, ok := param.(bool)
-			if !ok {
+			if !ok || !value {
 				return fmt.Errorf("%w: created", ErrMalformedSignatureParameter)
 			}
 
 			p.created = value
 		case Expires:
 			value, ok := param.(bool)
-			if !ok {
+			if !ok || !value {
 				return fmt.Errorf("%w: expires", ErrMalformedSignatureParameter)
 			}
 
 			p.expires = value
 		case KeyID:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: keyid", ErrMalformedSignatureParameter)
 			}
 
 			p.keyID = value
 		case Alg:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: alg", ErrMalformedSignatureParameter)
 			}
 
 			p.alg = SignatureAlgorithm(value)
 		case Nonce:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: nonce", ErrMalformedSignatureParameter)
 			}
 
 			p.nonce = value
 		case Tag:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: tag", ErrMalformedSignatureParameter)
 			}
 
 			p.tag = value
 		default:
-			return fmt.Errorf("%w: %s is unknown", ErrMalformedSignatureParameter, name)
+			if p.extensions == nil {
+				p.extensions = make(SignatureParameters)
+			}
+
+			p.extensions[SignatureParameter(name)] = decodeParameter(param)
 		}
 	}
 

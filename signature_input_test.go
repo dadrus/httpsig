@@ -345,15 +345,13 @@ func TestSignatureInputParameters(t *testing.T) {
 			params: func() *httpsfv.Params {
 				params := httpsfv.NewParams()
 				params.Add(string(Created), int64(1577836800))
-				params.Add("foo", httpsfv.Token("hello"))
-				params.Add("bar", httpsfv.DisplayString("hello"))
+				params.Add("foo", "hello")
 
 				return params
 			}(),
 			want: SignatureParameters{
 				Created: int64(1577836800),
-				"foo":   Token("hello"),
-				"bar":   "hello",
+				"foo":   "hello",
 			},
 		},
 	} {
@@ -361,6 +359,25 @@ func TestSignatureInputParameters(t *testing.T) {
 			input := &signatureInput{value: httpsfv.InnerList{Params: tc.params}}
 
 			assert.Equal(t, tc.want, input.parameters())
+		})
+	}
+}
+
+func TestDecodeParameter(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		value any
+		want  any
+	}{
+		"token":          {value: httpsfv.Token("foo"), want: Token("foo")},
+		"display string": {value: httpsfv.DisplayString("café"), want: "café"},
+		"string":         {value: "foo", want: "foo"},
+		"integer":        {value: int64(42), want: int64(42)},
+		"byte sequence":  {value: []byte{1, 2, 3}, want: []byte{1, 2, 3}},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			assert.Equal(t, tc.want, decodeParameter(tc.value))
 		})
 	}
 }

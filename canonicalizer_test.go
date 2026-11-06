@@ -14,33 +14,44 @@ import (
 func TestCanonicalizerFor(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name string
-		err  bool
-	}{
-		{"@method", false},
-		{"@target-uri", false},
-		{"@authority", false},
-		{"@scheme", false},
-		{"@request-target", false},
-		{"@path", false},
-		{"@query", false},
-		{"@query-param", false},
-		{"@status", false},
-		{"@foo", true},
-		{"x-foo-bar", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			c, err := canonicalizerFor(tc.name)
+	queryParams := httpsfv.NewParams()
+	queryParams.Add("name", "foo")
 
-			if tc.err {
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
+	nonStringQueryParams := httpsfv.NewParams()
+	nonStringQueryParams.Add("name", httpsfv.Token("foo"))
+
+	for uc, tc := range map[string]struct {
+		name   string
+		params *httpsfv.Params
+		err    error
+	}{
+		"@method":                           {name: "@method"},
+		"@target-uri":                       {name: "@target-uri"},
+		"@authority":                        {name: "@authority"},
+		"@scheme":                           {name: "@scheme"},
+		"@request-target":                   {name: "@request-target"},
+		"@path":                             {name: "@path"},
+		"@query":                            {name: "@query"},
+		"@query-param":                      {name: "@query-param", params: queryParams},
+		"@query-param without name":         {name: "@query-param", params: httpsfv.NewParams(), err: ErrInvalidComponentIdentifier},
+		"@query-param with non-string name": {name: "@query-param", params: nonStringQueryParams, err: ErrInvalidComponentIdentifier},
+		"@status":                           {name: "@status"},
+		"@foo":                              {name: "@foo", err: ErrUnsupportedComponentIdentifier},
+		"x-foo-bar":                         {name: "x-foo-bar"},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			c, err := canonicalizerFor(tc.name, tc.params)
+
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
 				require.ErrorContains(t, err, tc.name)
-			} else {
-				require.NoError(t, err)
-				assert.NotNil(t, c)
+				assert.Nil(t, c)
+
+				return
 			}
+
+			require.NoError(t, err)
+			assert.NotNil(t, c)
 		})
 	}
 }
@@ -469,28 +480,6 @@ func TestCanonicalization(t *testing.T) {
 				require.ErrorContains(t, err, "occurs multiple times")
 			},
 		},
-		"@query-param for request - invalid, without required name parameter": {
-			identifier: `"@query-param"`,
-			message:    &Message{URL: testURL1, IsRequest: true},
-			assert: func(t *testing.T, err error, _ []string) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrCanonicalization)
-				require.ErrorContains(t, err, "named parameter")
-			},
-		},
-		"@query-param for request - invalid token name parameter": {
-			identifier: `"@query-param";name=foo`,
-			message:    &Message{URL: testURL1, IsRequest: true},
-			assert: func(t *testing.T, err error, _ []string) {
-				t.Helper()
-
-				require.Error(t, err)
-				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
-				require.ErrorContains(t, err, "must be a string")
-			},
-		},
 		"@query-param for request - invalid, parameter not present in query": {
 			identifier: `"@query-param";name="moo"`,
 			message:    &Message{URL: testURL1, IsRequest: true},
@@ -634,7 +623,7 @@ func TestCanonicalization(t *testing.T) {
 			item, err := httpsfv.UnmarshalItem([]string{tc.identifier})
 			require.NoError(t, err)
 
-			c, err := canonicalizerFor(strings.ToLower(item.Value.(string)))
+			c, err := canonicalizerFor(strings.ToLower(item.Value.(string)), item.Params)
 			require.NoError(t, err)
 
 			res, err := c.canonicalize(tc.message, item.Params)

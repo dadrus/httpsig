@@ -51,15 +51,6 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 			},
 		},
-		"content identifier must be lowercase": {
-			identifiers: []string{"Content-Digest"},
-			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
-				t.Helper()
-
-				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
-				assert.Nil(t, ci)
-			},
-		},
 		"preserving structured field parameter types": {
 			identifiers: []string{`x-test;string="abc";token=abc;bytes=:AQID:`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
@@ -79,11 +70,6 @@ func TestToComponentIdentifiers(t *testing.T) {
 				bytesValue, ok := ci[0].Params.Get("bytes")
 				require.True(t, ok)
 				assert.Equal(t, []byte{1, 2, 3}, bytesValue)
-
-				input := newSignatureInput(ci, nil)
-				marshalled, err := httpsfv.Marshal(input.value)
-				require.NoError(t, err)
-				assert.Equal(t, `("x-test";string="abc";token=abc;bytes=:AQID:)`, marshalled)
 			},
 		},
 		"valid": {
@@ -145,6 +131,15 @@ func TestNewComponentIdentifier(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 			},
 		},
+		"uppercase component name": {
+			item: httpsfv.NewItem("Content-Type"),
+			assert: func(t *testing.T, ci *componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
 		"valid": {
 			item: func() httpsfv.Item {
 				item := httpsfv.NewItem("@method")
@@ -168,6 +163,82 @@ func TestNewComponentIdentifier(t *testing.T) {
 			ci, err := newComponentIdentifier(tc.item)
 
 			tc.assert(t, ci, err)
+		})
+	}
+}
+
+func TestComponentIdentifierEqual(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		first  string
+		second string
+		equal  bool
+	}{
+		"same identifier with reordered parameters": {
+			first:  `x-test;key="foo";sf`,
+			second: `x-test;sf;key="foo"`,
+			equal:  true,
+		},
+		"different names": {
+			first:  `x-first`,
+			second: `x-second`,
+		},
+		"different parameter names": {
+			first:  `x-test;first="foo"`,
+			second: `x-test;second="foo"`,
+		},
+		"different parameter counts": {
+			first:  `x-test;req`,
+			second: `x-test`,
+		},
+		"different parameter values": {
+			first:  `x-test;key="foo"`,
+			second: `x-test;key="bar"`,
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			identifiers, err := toComponentIdentifiers([]string{tc.first, tc.second})
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.equal, identifiers[0].equal(identifiers[1]))
+		})
+	}
+}
+
+func TestEqualComponentParameterValues(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		actual   any
+		expected any
+		equal    bool
+	}{
+		"equal byte sequences": {
+			actual:   []byte{1, 2, 3},
+			expected: []byte{1, 2, 3},
+			equal:    true,
+		},
+		"different byte sequences": {
+			actual:   []byte{1, 2, 4},
+			expected: []byte{1, 2, 3},
+		},
+		"non-byte value against byte sequence": {
+			actual:   "foo",
+			expected: []byte{1, 2, 3},
+		},
+		"equal scalar values": {
+			actual:   int64(42),
+			expected: int64(42),
+			equal:    true,
+		},
+		"different scalar types": {
+			actual:   httpsfv.Token("foo"),
+			expected: "foo",
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			assert.Equal(t, tc.equal, equalComponentParameterValues(tc.actual, tc.expected))
 		})
 	}
 }

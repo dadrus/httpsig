@@ -1726,6 +1726,34 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, map[string]string{"foo": "bar"}, sig.Metadata)
 			},
 		},
+		"unselected invalid component identifier is ignored": {
+			opts: []VerifierOption{
+				WithRequiredTag("foo"),
+				WithExpiresTimestamp(false),
+			},
+			msg: &Message{Header: http.Header{
+				"Signature-Input": {
+					`valid=();created=1618884473;keyid="test-shared-secret";tag="foo", ` +
+						`invalid=("@query-param");tag="bar"`,
+				},
+				"Signature": {
+					`valid=:VhBIZ0nP4o+r4bSKCvC+gc0VI1yVhhN1PECWW8ZF2Dg=:, invalid=:dGVzdA==:`,
+				},
+			}},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				kr.EXPECT().ResolveKey(mock.Anything, mock.Anything).
+					Return(KeyInfo{Key: Key{Material: tkMAC, Algorithm: HmacSha256}}, nil).Once()
+			},
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "valid", results[0].Label)
+			},
+		},
 		"invalid untagged signature fails when validating all": {
 			opts: []VerifierOption{
 				WithValidateAllSignatures(),
@@ -2039,124 +2067,305 @@ func TestVerifierVerify(t *testing.T) {
 	})
 }
 
-func TestVerifierApplicableSignatures(t *testing.T) {
+func TestSignatureTag(t *testing.T) {
 	t.Parallel()
 
-	withTag := func(tag string) *signatureInput {
+	withValue := func(name string, value any) httpsfv.InnerList {
+		params := httpsfv.NewParams()
+		params.Add(name, value)
+
+		return httpsfv.InnerList{Params: params}
+	}
+
+	for uc, tc := range map[string]struct {
+		list    httpsfv.InnerList
+		tag     string
+		present bool
+	}{
+		"nil parameters": {},
+		"tag missing": {
+			list: withValue("other", "test"),
+		},
+		"tag has wrong type": {
+			list: withValue(string(Tag), true),
+		},
+		"string tag": {
+			list: withValue(string(Tag), "app"),
+			tag:  "app", present: true,
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			tag, present := signatureTag(tc.list)
+
+			assert.Equal(t, tc.tag, tag)
+			assert.Equal(t, tc.present, present)
+		})
+	}
+}
+
+func TestGetSignatureReferences(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		values []string
+		labels []string
+		err    error
+	}{
+		"no header": {labels: []string{}},
+		"valid inner lists": {
+			values: []string{`first=("@method"), second=("@status")`},
+			labels: []string{"first", "second"},
+		},
+		"invalid structured fields": {
+			values: []string{`sig=("@method"`},
+			err:    ErrMalformedData,
+		},
+		"member is not an inner list": {
+			values: []string{`sig="@method"`},
+			err:    ErrMalformedData,
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			refs, err := getSignatureReferences(tc.values)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+				assert.Nil(t, refs)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, refs)
+			assert.Equal(t, tc.labels, refs.Names())
+		})
+	}
+}
+
+func TestVerifierHasMissingSignatures(t *testing.T) {
+	t.Parallel()
+
+	withTag := func(tag string) httpsfv.InnerList {
 		params := httpsfv.NewParams()
 		params.Add(string(Tag), tag)
 
-		return newSignatureInput(nil, params)
+		return httpsfv.InnerList{Params: params}
+	}
+
+	for uc, tc := range map[string]struct {
+		policies map[string]*verificationPolicy
+		members  map[string]httpsfv.InnerList
+		missing  bool
+	}{
+		"all required tags present": {
+			policies: map[string]*verificationPolicy{"foo": {}, "bar": {}},
+			members:  map[string]httpsfv.InnerList{"first": withTag("foo"), "second": withTag("bar")},
+		},
+		"required tag missing": {
+			policies: map[string]*verificationPolicy{"foo": {}},
+			members:  map[string]httpsfv.InnerList{"sig": withTag("other")},
+			missing:  true,
+		},
+		"global policy does not require a tag": {
+			policies: map[string]*verificationPolicy{"": {}},
+		},
+		"non-string tag does not satisfy policy": {
+			policies: map[string]*verificationPolicy{"foo": {}},
+			members: map[string]httpsfv.InnerList{
+				"sig": {Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Tag), true)
+
+					return params
+				}()},
+			},
+			missing: true,
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			refs := httpsfv.NewDictionary()
+			for name, list := range tc.members {
+				refs.Add(name, list)
+			}
+
+			v := verifier{tagPolicies: tc.policies}
+			assert.Equal(t, tc.missing, v.hasMissingSignatures(refs))
+		})
+	}
+}
+
+func TestVerifierApplicableSignatures(t *testing.T) {
+	t.Parallel()
+
+	withTag := func(tag string) httpsfv.InnerList {
+		params := httpsfv.NewParams()
+		params.Add(string(Tag), tag)
+
+		return newSignatureInput(nil, params).value
 	}
 
 	for uc, tc := range map[string]struct {
 		verifier verifier
-		refs     map[string]*signatureInput
-		assert   func(t *testing.T, err error, refs map[string]*signatureInput)
+		refs     map[string]httpsfv.InnerList
+		labels   []string
+		wantErr  error
 	}{
 		"only required signatures are applicable": {
 			verifier: verifier{
 				tagPolicies: map[string]*verificationPolicy{"foo": {}},
 			},
-			refs: map[string]*signatureInput{
+			refs: map[string]httpsfv.InnerList{
 				"matching": withTag("foo"),
 				"other":    withTag("bar"),
 				"empty":    withTag(""),
-				"untagged": newSignatureInput(nil, nil),
+				"untagged": {},
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
-
-				require.NoError(t, err)
-				require.Len(t, refs, 1)
-				assert.Contains(t, refs, "matching")
-			},
+			labels: []string{"matching"},
 		},
 		"no matching signature": {
 			verifier: verifier{
 				tagPolicies: map[string]*verificationPolicy{"foo": {}},
 			},
-			refs: map[string]*signatureInput{
+			refs: map[string]httpsfv.InnerList{
 				"other": withTag("bar"),
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
-
-				require.ErrorIs(t, err, &NoApplicableSignatureError{})
-				assert.Nil(t, refs)
-			},
+			wantErr: &NoApplicableSignatureError{},
 		},
 		"missing tag": {
 			verifier: verifier{
 				tagPolicies: map[string]*verificationPolicy{"foo": {}},
 			},
-			refs: map[string]*signatureInput{
-				"untagged": newSignatureInput(nil, nil),
+			refs: map[string]httpsfv.InnerList{
+				"untagged": {},
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
-
-				require.ErrorIs(t, err, &NoApplicableSignatureError{})
-				assert.Nil(t, refs)
-			},
+			wantErr: &NoApplicableSignatureError{},
 		},
 		"all signatures are applicable": {
 			verifier: verifier{
 				validateAllSigs: true,
 			},
-			refs: map[string]*signatureInput{
+			refs: map[string]httpsfv.InnerList{
 				"tagged":   withTag("foo"),
 				"empty":    withTag(""),
-				"untagged": newSignatureInput(nil, nil),
+				"untagged": {},
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
-
-				require.NoError(t, err)
-				assert.Len(t, refs, 3)
-				assert.Contains(t, refs, "tagged")
-				assert.Contains(t, refs, "empty")
-				assert.Contains(t, refs, "untagged")
-			},
+			labels: []string{"tagged", "empty", "untagged"},
 		},
 		"validate all with required tag": {
 			verifier: verifier{
 				validateAllSigs: true,
 				tagPolicies:     map[string]*verificationPolicy{"foo": {}},
 			},
-			refs: map[string]*signatureInput{
+			refs: map[string]httpsfv.InnerList{
 				"matching": withTag("foo"),
 				"other":    withTag("bar"),
-				"untagged": newSignatureInput(nil, nil),
+				"untagged": {},
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
+			labels: []string{"matching", "other", "untagged"},
+		},
+		"unselected invalid component identifier is ignored": {
+			verifier: verifier{
+				tagPolicies: map[string]*verificationPolicy{"foo": {}},
+			},
+			refs: map[string]httpsfv.InnerList{
+				"valid": withTag("foo"),
+				"invalid": {
+					Items:  []httpsfv.Item{httpsfv.NewItem("@query-param")},
+					Params: withTag("bar").Params,
+				},
+			},
+			labels: []string{"valid"},
+		},
+		"unselected invalid signature parameter is ignored": {
+			verifier: verifier{
+				tagPolicies: map[string]*verificationPolicy{"foo": {}},
+			},
+			refs: map[string]httpsfv.InnerList{
+				"valid": withTag("foo"),
+				"invalid": {
+					Params: func() *httpsfv.Params {
+						params := httpsfv.NewParams()
+						params.Add(string(Tag), "bar")
+						params.Add(string(Created), false)
 
-				require.NoError(t, err)
-				assert.Len(t, refs, 3)
-				assert.Contains(t, refs, "matching")
-				assert.Contains(t, refs, "other")
-				assert.Contains(t, refs, "untagged")
+						return params
+					}(),
+				},
 			},
+			labels: []string{"valid"},
+		},
+		"non-string tag is not selected": {
+			verifier: verifier{
+				tagPolicies: map[string]*verificationPolicy{"foo": {}},
+			},
+			refs: map[string]httpsfv.InnerList{
+				"valid": withTag("foo"),
+				"invalid": {
+					Params: func() *httpsfv.Params {
+						params := httpsfv.NewParams()
+						params.Add(string(Tag), true)
+
+						return params
+					}(),
+				},
+			},
+			labels: []string{"valid"},
+		},
+		"selected invalid component identifier fails": {
+			verifier: verifier{
+				tagPolicies: map[string]*verificationPolicy{"foo": {}},
+			},
+			refs: map[string]httpsfv.InnerList{
+				"sig": {
+					Items:  []httpsfv.Item{httpsfv.NewItem("@query-param")},
+					Params: withTag("foo").Params,
+				},
+			},
+			wantErr: ErrInvalidComponentIdentifier,
+		},
+		"validate all rejects invalid signature parameter": {
+			verifier: verifier{validateAllSigs: true},
+			refs: map[string]httpsfv.InnerList{
+				"sig": {
+					Params: func() *httpsfv.Params {
+						params := httpsfv.NewParams()
+						params.Add(string(Created), false)
+
+						return params
+					}(),
+				},
+			},
+			wantErr: ErrMalformedSignatureParameter,
 		},
 		"no signatures": {
 			verifier: verifier{
 				validateAllSigs: true,
 			},
-			assert: func(t *testing.T, err error, refs map[string]*signatureInput) {
-				t.Helper()
-
-				require.ErrorIs(t, err, &NoApplicableSignatureError{})
-				assert.Nil(t, refs)
-			},
+			wantErr: &NoApplicableSignatureError{},
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			v := tc.verifier
+			dict := httpsfv.NewDictionary()
+			for name, list := range tc.refs {
+				dict.Add(name, list)
+			}
 
-			refs, err := v.applicableSignatures(tc.refs)
+			refs, err := tc.verifier.applicableSignatures(dict)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Nil(t, refs)
 
-			tc.assert(t, err, refs)
+				return
+			}
+
+			require.NoError(t, err)
+
+			labels := make([]string, 0, len(refs))
+			for _, ref := range refs {
+				require.NotNil(t, ref.input)
+				labels = append(labels, ref.label)
+			}
+
+			assert.ElementsMatch(t, tc.labels, labels)
 		})
 	}
 }

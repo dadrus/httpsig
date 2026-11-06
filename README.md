@@ -18,6 +18,16 @@ For API details and option semantics, see the [Go reference](https://pkg.go.dev/
 
 ## Usage
 
+> [!NOTE]
+> Component identifiers are represented as [Structured Fields Items](https://www.rfc-editor.org/rfc/rfc9421.html#section-2.5), with quoted component names (for example, `"@method"` or `"content-digest";req`). For convenience, configuration options such as `WithComponents` also accept a simplified form that omits the quotes around the component name. Both forms are equivalent:
+>
+> ```go
+> httpsig.WithComponents(`"@method"`, `"content-digest";req`) // Structured Fields form
+> httpsig.WithComponents("@method", "content-digest;req")     // simplified form
+> ```
+>
+> When parsing an `Accept-Signature` header, `httpsig` returns the serialized Structured Fields form in `SignatureRequest.Components`. These values can be passed directly to `WithComponents`.
+
 ### Standalone Signing and Verification
 
 The following snippets show two independent flows: signing an outgoing request and verifying a received response. They assume application-provided keys and other values; routine error handling is abbreviated.
@@ -205,6 +215,8 @@ nonce := ... // application-generated nonce for this request
 
 err = builder.Build(req.Context(), req.Header, httpsig.WithParameter("nonce", nonce))
 // error handling goes here
+
+// send the request
 ```
 
 This adds an `Accept-Signature` header with a value such as:
@@ -215,6 +227,45 @@ Want-Content-Digest: sha-256=2
 ```
 
 The `Want-Content-Digest` header is also added because the requested signature covers `content-digest`.
+
+#### Fulfilling a Signature Request
+
+Use `ParseAcceptSignature` when a peer requests a signature, for example in a `401` response to your request. It takes an `http.Header`, so it works independently of signers and verifiers, and returns one `SignatureRequest` per requested signature:
+
+```go
+requests, err := httpsig.ParseAcceptSignature(resp.Header)
+// err reports the members that can't be used; requests holds the usable ones
+
+msg := httpsig.MessageFromRequest(req)
+
+for _, request := range requests {
+    // decide whether the request is acceptable for your application
+
+    signer, err := httpsig.NewSigner(
+        key,
+        httpsig.WithLabel(request.Label),
+        httpsig.WithComponents(request.Components...),
+        httpsig.WithTag(request.Tag),
+    )
+    // error handling goes here
+
+    var opts []httpsig.SignOption
+    if request.Nonce != "" {
+        opts = append(opts, httpsig.WithParameter("nonce", request.Nonce))
+    }
+
+    _, err := signer.Sign(msg, opts...)
+    // error handling goes here
+
+    // ...
+}
+
+req.Header = msg.Header
+
+// send the request
+```
+
+`Created` and `Expires` report whether these parameters are requested, as `Accept-Signature` carries no timestamp values. A `Signer` always includes `created`; use `WithTTL` to include `expires`. Parameters not defined by RFC 9421 are available in `Extensions`. If the field as a whole isn't valid Structured Fields, no requests are returned. A malformed member or one with an unsupported component identifier doesn't affect the other members: the usable requests are returned together with a joined error that wraps `ErrMalformedData` for each unusable member. Require `err == nil` if your application must fulfill every request.
 
 #### Requesting Signatures on the Server-Side from the Client
 
@@ -598,6 +649,7 @@ app.Use(func(c fiber.Ctx) error {
 
 * **Coverage:** Require the components your application relies on. For messages with bodies, sign and verify `content-digest` when body integrity matters.
 * **Key trust:** `KeyResolver` receives unverified message data. Select and validate keys according to your application protocol.
+* **Signature requests:** `Accept-Signature` is controlled by the peer. Check the components, key, and parameters of a `SignatureRequest` before signing, so a peer cannot obtain signatures your application did not intend to produce.
 * **Replay:** Enforce the required nonce checks after successful signature verification.
 * **Multiple signatures:** Labels are not signed, and `VerificationResult` has no defined order. Choose the required tags or validate all signatures as appropriate.
 
@@ -610,7 +662,6 @@ See also [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc94
 Following are the known limitations and deviations:
 
 - **HTTP trailers:** The `;tr` component identifier parameter is not supported. `Signature` and `Signature-Input` fields cannot be processed as trailers.
-- **Signature negotiation:** Generating `Accept-Signature` is supported, but parsing received `Accept-Signature` fields is not yet implemented.
 
 ### Other Limitations
 

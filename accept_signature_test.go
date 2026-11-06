@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/dunglas/httpsfv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -419,4 +420,156 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, `sig=();created;expires;bytes=:YmVmb3Jl:`, hdr.Get(headerAcceptSignature))
 	})
+}
+
+func TestNewSignatureRequest(t *testing.T) {
+	t.Parallel()
+
+	contentDigest := httpsfv.NewItem("content-digest")
+	contentDigest.Params.Add("req", true)
+
+	queryParam := httpsfv.NewItem("@query-param")
+	queryParam.Params.Add("name", "a;b")
+
+	params := httpsfv.NewParams()
+	params.Add(string(Created), true)
+	params.Add(string(Expires), true)
+	params.Add(string(KeyID), "test-key")
+	params.Add(string(Alg), "ed25519")
+	params.Add(string(Nonce), "abc")
+	params.Add(string(Tag), "app-123")
+	params.Add("audience", httpsfv.Token("service-a"))
+
+	for uc, tc := range map[string]struct {
+		list     httpsfv.InnerList
+		expected SignatureRequest
+		err      error
+	}{
+		"empty request": {
+			list:     httpsfv.InnerList{Params: httpsfv.NewParams()},
+			expected: SignatureRequest{Label: "sig", Components: []string{}},
+		},
+		"serializing component identifiers and copying parameters": {
+			list: httpsfv.InnerList{
+				Items:  []httpsfv.Item{httpsfv.NewItem("@method"), contentDigest, queryParam},
+				Params: params,
+			},
+			expected: SignatureRequest{
+				Label:      "sig",
+				Components: []string{`"@method"`, `"content-digest";req`, `"@query-param";name="a;b"`},
+				KeyID:      "test-key",
+				Algorithm:  Ed25519,
+				Tag:        "app-123",
+				Nonce:      "abc",
+				Created:    true,
+				Expires:    true,
+				Extensions: SignatureParameters{"audience": Token("service-a")},
+			},
+		},
+		"invalid component identifier": {
+			list: httpsfv.InnerList{
+				Items: []httpsfv.Item{httpsfv.NewItem("@unsupported")},
+			},
+			err: ErrUnsupportedComponentIdentifier,
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			request, err := newSignatureRequest("sig", tc.list)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+				assert.Equal(t, SignatureRequest{}, request)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, request)
+		})
+	}
+}
+
+func TestParseAcceptSignature(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		values      []string
+		expected    []SignatureRequest
+		err         []error
+		errContains []string
+	}{
+		"no header": {
+			expected: []SignatureRequest{},
+		},
+		"single request": {
+			values:   []string{`sig=("@method");tag="app-123"`},
+			expected: []SignatureRequest{{Label: "sig", Components: []string{`"@method"`}, Tag: "app-123"}},
+		},
+		"multiple members keep their order": {
+			values: []string{`zeta=("@status"), alpha=("@method");tag="a"`},
+			expected: []SignatureRequest{
+				{Label: "zeta", Components: []string{`"@status"`}},
+				{Label: "alpha", Components: []string{`"@method"`}, Tag: "a"},
+			},
+		},
+		"multiple field lines": {
+			values: []string{`a=("@status")`, `b=("@method")`},
+			expected: []SignatureRequest{
+				{Label: "a", Components: []string{`"@status"`}},
+				{Label: "b", Components: []string{`"@method"`}},
+			},
+		},
+		"invalid structured fields": {
+			values: []string{`good=("@status"), (`},
+			err:    []error{ErrMalformedData},
+		},
+		"member is not an inner list": {
+			values:   []string{`sig="@status"`},
+			expected: []SignatureRequest{},
+			err:      []error{ErrMalformedData},
+		},
+		"unusable member keeps the usable ones": {
+			values: []string{`first=("@status"), bad=("@foo"), last=("@method")`},
+			expected: []SignatureRequest{
+				{Label: "first", Components: []string{`"@status"`}},
+				{Label: "last", Components: []string{`"@method"`}},
+			},
+			err: []error{ErrMalformedData, ErrUnsupportedComponentIdentifier},
+		},
+		"every unusable member is reported": {
+			values:   []string{`good=("@status"), scalar=1, comp=("@foo"), param=();created=1`},
+			expected: []SignatureRequest{{Label: "good", Components: []string{`"@status"`}}},
+			err: []error{
+				ErrMalformedData,
+				ErrUnsupportedComponentIdentifier,
+				ErrMalformedSignatureParameter,
+			},
+			errContains: []string{`"scalar"`, `"comp"`, `"param"`},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			t.Parallel()
+
+			header := http.Header{}
+			for _, value := range tc.values {
+				header.Add(headerAcceptSignature, value)
+			}
+
+			requests, err := ParseAcceptSignature(header)
+			assert.Equal(t, tc.expected, requests)
+
+			if len(tc.err) == 0 {
+				require.NoError(t, err)
+
+				return
+			}
+
+			for _, expected := range tc.err {
+				require.ErrorIs(t, err, expected)
+			}
+
+			for _, expected := range tc.errContains {
+				require.ErrorContains(t, err, expected)
+			}
+		})
+	}
 }

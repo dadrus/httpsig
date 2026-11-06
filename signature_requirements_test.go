@@ -315,6 +315,40 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 			},
 		},
 		{
+			uc: "failing parsing false created parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Created), false)
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "created")
+			},
+		},
+		{
+			uc: "failing parsing false expires parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Expires), false)
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "expires")
+			},
+		},
+		{
 			uc: "failing parsing keyid parameter",
 			list: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
@@ -387,11 +421,11 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 			},
 		},
 		{
-			uc: "failing parsing unknown parameter",
+			uc: "failing parsing empty keyid parameter",
 			list: httpsfv.InnerList{
 				Params: func() *httpsfv.Params {
 					params := httpsfv.NewParams()
-					params.Add("foo", 1)
+					params.Add(string(KeyID), "")
 
 					return params
 				}(),
@@ -399,9 +433,111 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 			assert: func(t *testing.T, err error, _ *signatureRequirements) {
 				t.Helper()
 
-				require.Error(t, err)
 				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
-				require.ErrorContains(t, err, "foo is unknown")
+				require.ErrorContains(t, err, "keyid")
+			},
+		},
+		{
+			uc: "failing parsing empty alg parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Alg), "")
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "alg")
+			},
+		},
+		{
+			uc: "failing parsing empty nonce parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Nonce), "")
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "nonce")
+			},
+		},
+		{
+			uc: "failing parsing empty tag parameter",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add(string(Tag), "")
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedSignatureParameter)
+				require.ErrorContains(t, err, "tag")
+			},
+		},
+		{
+			uc: "duplicate component identifiers",
+			list: httpsfv.InnerList{
+				Items: []httpsfv.Item{httpsfv.NewItem("@method"), httpsfv.NewItem("@method")},
+			},
+			assert: func(t *testing.T, err error, _ *signatureRequirements) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedData)
+				require.ErrorContains(t, err, "duplicate component identifier")
+			},
+		},
+		{
+			uc: "same component with different parameters",
+			list: httpsfv.InnerList{
+				Params: httpsfv.NewParams(),
+				Items: func() []httpsfv.Item {
+					first := httpsfv.NewItem("@query-param")
+					first.Params.Add("name", "foo")
+
+					second := httpsfv.NewItem("@query-param")
+					second.Params.Add("name", "bar")
+
+					return []httpsfv.Item{first, second}
+				}(),
+			},
+			assert: func(t *testing.T, err error, params *signatureRequirements) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, params.identifiers, 2)
+				assert.Equal(t, "@query-param", params.identifiers[0].Value)
+				assert.Equal(t, "@query-param", params.identifiers[1].Value)
+			},
+		},
+		{
+			uc: "collecting extension parameters",
+			list: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add("foo", "bar")
+
+					return params
+				}(),
+			},
+			assert: func(t *testing.T, err error, params *signatureRequirements) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, SignatureParameters{"foo": "bar"}, params.extensions)
 			},
 		},
 		{

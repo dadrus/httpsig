@@ -90,6 +90,18 @@ func TestNewSignatureBase(t *testing.T) {
 				require.ErrorContains(t, err, "duplicate component identifier")
 			},
 		},
+		"failing for duplicate component identifier with reordered parameters": {
+			components: []string{
+				`content-digest;key="sha-512";sf`,
+				`content-digest;sf;key="sha-512"`,
+			},
+			assert: func(t *testing.T, err error, _ signatureBase) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrMalformedData)
+				require.ErrorContains(t, err, "duplicate component identifier")
+			},
+		},
 		"failing for unknown component identifier": {
 			components: []string{"@status"},
 			assert: func(t *testing.T, err error, _ signatureBase) {
