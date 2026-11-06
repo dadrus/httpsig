@@ -18,13 +18,7 @@ type serializer interface {
 	serialize(v []string) ([]string, error)
 }
 
-//nolint:cyclop
 func newSerializer(params *httpsfv.Params, isRequest bool) (serializer, error) {
-	var (
-		key string
-		ok  bool
-	)
-
 	if _, hasReqParam := params.Get("req"); hasReqParam && isRequest {
 		return nil, fmt.Errorf("%w: 'req' parameter not valid for requests",
 			errSerialization)
@@ -32,23 +26,8 @@ func newSerializer(params *httpsfv.Params, isRequest bool) (serializer, error) {
 
 	_, isBs := params.Get("bs")
 	_, isSf := params.Get("sf")
-	_, isTr := params.Get("tr")
 	keyParam, isKey := params.Get("key")
-
-	if isTr {
-		return nil, fmt.Errorf("%w: message trailers are not supported", errSerialization)
-	}
-
-	if isBs && (isSf || isKey) {
-		return nil, fmt.Errorf("%w: cannot have both 'bs' and 'sf'/'key' parameters",
-			errSerialization)
-	}
-
-	if isKey {
-		if key, ok = keyParam.(string); !ok {
-			return nil, fmt.Errorf("%w: key parameter must be a string", errSerialization)
-		}
-	}
+	key, _ := keyParam.(string) // validated by canonicalizerFor
 
 	switch {
 	case isSf || isKey:

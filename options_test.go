@@ -98,7 +98,7 @@ func TestWithComponentsForSigner(t *testing.T) {
 		identifiers []string
 		err         error
 	}{
-		"multiple valid identifier": {identifiers: []string{"@status;req", "@method"}},
+		"multiple valid identifier": {identifiers: []string{"@method;req", "@status"}},
 		"invalid identifier":        {identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
 	} {
 		t.Run(uc, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestWithComponentsForVerifier(t *testing.T) {
 		identifiers []string
 		err         error
 	}{
-		"multiple valid identifier": {identifiers: []string{"@status;req", "@method"}},
+		"multiple valid identifier": {identifiers: []string{"@method;req", "@status"}},
 		"invalid identifier":        {identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
 	} {
 		t.Run(uc, func(t *testing.T) {
