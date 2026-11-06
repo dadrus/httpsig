@@ -10,3 +10,5 @@ packages:
     interfaces:
       NonceGetter: {}
       KeyResolver: {}
+      MessageSigner: {}
+      MessageVerifier: {}
