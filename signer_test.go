@@ -40,25 +40,25 @@ func TestNewPayloadSigner(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(k256), n)
 
-	for _, tc := range []struct {
-		uc  string
+	for uc, tc := range map[string]struct {
 		key any
 		alg SignatureAlgorithm
 		typ any
 		err error
 	}{
-		{uc: "unsupported algorithm", key: "foo", err: ErrUnsupportedKeyType},
-		{uc: "ed25519 signer", key: ek25519, alg: Ed25519, typ: &ed25519Signer{}},
-		{uc: "rsa signer", key: pk2048, alg: RsaPssSha256, typ: &rsaSigner{}},
-		{uc: "ecdsa signer", key: pkp256, alg: EcdsaP256Sha256, typ: &ecdsaSigner{}},
-		{uc: "hmac signer", key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"unsupported key type": {key: "foo", err: ErrUnsupportedKeyType},
+		"ed25519 signer":       {key: ek25519, alg: Ed25519, typ: &ed25519Signer{}},
+		"rsa signer":           {key: pk2048, alg: RsaPssSha256, typ: &rsaSigner{}},
+		"ecdsa signer":         {key: pkp256, alg: EcdsaP256Sha256, typ: &ecdsaSigner{}},
+		"hmac signer":          {key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"message signer":       {key: &MessageSignerMock{}, alg: SignatureAlgorithm("custom-alg"), typ: &messageSignerAdaptor{}},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			sig, err := newPayloadSigner(tc.key, tc.alg)
 
 			if tc.err != nil {
-				require.Error(t, err)
 				require.ErrorIs(t, err, tc.err)
+				assert.Nil(t, sig)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
@@ -108,6 +108,17 @@ func TestNewSigner(t *testing.T) {
 				t.Helper()
 
 				require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+			},
+		},
+		{
+			uc:   "unknown algorithm with message signer",
+			key:  Key{Algorithm: SignatureAlgorithm("custom-alg"), Material: &MessageSignerMock{}},
+			opts: []SignerOption{WithAlg()},
+			assert: func(t *testing.T, err error, s Signer) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.NotNil(t, s)
 			},
 		},
 		{
