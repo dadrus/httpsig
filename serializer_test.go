@@ -152,6 +152,36 @@ func TestByteSequenceSerialization(t *testing.T) {
 			input:  []string{"value, with, lots, of, commas"},
 			result: []string{":dmFsdWUsIHdpdGgsIGxvdHMsIG9mLCBjb21tYXM=:"},
 		},
+		{
+			uc:     "preserve internal spaces and commas",
+			input:  []string{"foo ,  bar"},
+			result: []string{":Zm9vICwgIGJhcg==:"},
+		},
+		{
+			uc:     "preserve internal tabs",
+			input:  []string{"alpha\tbeta"},
+			result: []string{":YWxwaGEJYmV0YQ==:"},
+		},
+		{
+			uc:     "strip surrounding HTTP whitespace",
+			input:  []string{"\t alpha \t"},
+			result: []string{":YWxwaGE=:"},
+		},
+		{
+			uc:     "unfold obsolete line folding",
+			input:  []string{"hello\r\n \tworld"},
+			result: []string{":aGVsbG8gd29ybGQ=:"},
+		},
+		{
+			uc:     "unfold obsolete line folding with preceding whitespace",
+			input:  []string{"hello  \r\n \tworld"},
+			result: []string{":aGVsbG8gd29ybGQ=:"},
+		},
+		{
+			uc:     "preserve non-ASCII whitespace bytes",
+			input:  []string{"\u00a0alpha"},
+			result: []string{":wqBhbHBoYQ==:"},
+		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
 			params := httpsfv.NewParams()
