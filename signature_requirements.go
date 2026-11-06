@@ -106,28 +106,28 @@ func (p *signatureRequirements) fromInnerList(list httpsfv.InnerList) error {
 			p.expires = value
 		case KeyID:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: keyid", ErrMalformedSignatureParameter)
 			}
 
 			p.keyID = value
 		case Alg:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: alg", ErrMalformedSignatureParameter)
 			}
 
 			p.alg = SignatureAlgorithm(value)
 		case Nonce:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: nonce", ErrMalformedSignatureParameter)
 			}
 
 			p.nonce = value
 		case Tag:
 			value, ok := param.(string)
-			if !ok {
+			if !ok || value == "" {
 				return fmt.Errorf("%w: tag", ErrMalformedSignatureParameter)
 			}
 
