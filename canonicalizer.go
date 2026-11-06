@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -34,18 +35,38 @@ func assertRequestOnly(name string, params *httpsfv.Params, isRequest bool) erro
 	return nil
 }
 
-func assertResponseOnly(name string, params *httpsfv.Params, isRequest bool) error {
-	if _, isReq := params.Get("req"); isRequest || isReq {
-		return fmt.Errorf("%w: %s not valid for requests", ErrCanonicalization, name)
+// assertParameters checks whether parameters are applicable to a
+// component and have the required RFC 9421 types and values.
+func assertParameters(name string, params *httpsfv.Params, allowed ...string) error {
+	if params == nil {
+		return nil
 	}
 
-	return nil
-}
+	for _, param := range params.Names() {
+		if !slices.Contains(allowed, param) {
+			return fmt.Errorf("%w: parameter %q is not applicable to %s", ErrInvalidComponentIdentifier, param, name)
+		}
 
-func assertParameter(name string, params *httpsfv.Params, isRequest bool) error {
-	if _, forReq := params.Get("req"); forReq && isRequest {
-		return fmt.Errorf("%w: 'req' parameter in %s is not valid for requests",
-			ErrCanonicalization, name)
+		value, _ := params.Get(param)
+
+		switch param {
+		case "sf", "bs", "tr", "req":
+			enabled, ok := value.(bool)
+			if !ok || !enabled {
+				return fmt.Errorf("%w: %s parameter %q must be true", ErrInvalidComponentIdentifier, name, param)
+			}
+		case "key":
+			key, ok := value.(string)
+			if !ok || key == "" {
+				return fmt.Errorf("%w: %s parameter %q must be a non-empty string", ErrInvalidComponentIdentifier, name, param)
+			}
+		case "name":
+			if _, ok := value.(string); !ok {
+				return fmt.Errorf("%w: %s parameter %q must be a string", ErrInvalidComponentIdentifier, name, param)
+			}
+		default:
+			return fmt.Errorf("%w: %s has unsupported parameter %q", ErrInvalidComponentIdentifier, name, param)
+		}
 	}
 
 	return nil
@@ -55,175 +76,237 @@ func assertParameter(name string, params *httpsfv.Params, isRequest bool) error 
 func canonicalizerFor(name string, params *httpsfv.Params) (canonicalizer, error) {
 	switch name {
 	case "@method":
-		return canonicalizerFunc(canonicalizeMethod), nil
+		return newMethodCanonicalizer(params)
 	case "@target-uri":
-		return canonicalizerFunc(canonicalizeTargetURI), nil
+		return newTargetURICanonicalizer(params)
 	case "@authority":
-		return canonicalizerFunc(canonicalizeAuthority), nil
+		return newAuthorityCanonicalizer(params)
 	case "@scheme":
-		return canonicalizerFunc(canonicalizeScheme), nil
+		return newSchemeCanonicalizer(params)
 	case "@request-target":
-		return canonicalizerFunc(canonicalizeRequestTarget), nil
+		return newRequestTargetCanonicalizer(params)
 	case "@path":
-		return canonicalizerFunc(canonicalizePath), nil
+		return newPathCanonicalizer(params)
 	case "@query":
-		return canonicalizerFunc(canonicalizeQuery), nil
+		return newQueryCanonicalizer(params)
 	case "@query-param":
-		if params == nil {
-			return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
-		}
-
-		value, present := params.Get("name")
-		if !present {
-			return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
-		}
-
-		if _, ok := value.(string); !ok {
-			return nil, fmt.Errorf("%w: @query-param 'name' must be a string", ErrInvalidComponentIdentifier)
-		}
-
-		return canonicalizerFunc(canonicalizeQueryParam), nil
+		return newQueryParamCanonicalizer(params)
 	case "@status":
-		return canonicalizerFunc(canonicalizeStatusCode), nil
+		return newStatusCodeCanonicalizer(params)
 	default:
 		if strings.HasPrefix(name, "@") {
 			return nil, fmt.Errorf("%w: %s", ErrUnsupportedComponentIdentifier, name)
 		}
 
-		return headerCanonicalizer(name), nil
+		return newHeaderCanonicalizer(name, params)
 	}
 }
 
-func canonicalizeMethod(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#content-request-method (Section 2.2.1)
-	if err := assertRequestOnly("@method", params, msg.IsRequest); err != nil {
+func newMethodCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@method", params, "req"); err != nil {
 		return nil, err
 	}
 
-	return []string{msg.Method}, nil
-}
-
-func canonicalizeTargetURI(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-target-uri (Section 2.2.2)
-	if err := assertRequestOnly("@target-uri", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	return []string{msg.URL.String()}, nil
-}
-
-func canonicalizeAuthority(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-authority (Section 2.2.3)
-	if err := assertRequestOnly("@authority", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	host, port, err := net.SplitHostPort(msg.Authority)
-	if err != nil {
-		// no port, just use the whole thing
-		return []string{strings.ToLower(msg.Authority)}, nil //nolint:nilerr
-	}
-
-	// default ports shall be omitted
-	switch strings.ToLower(msg.URL.Scheme) {
-	case "http":
-		if port == "80" {
-			return []string{strings.ToLower(host)}, nil
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#content-request-method (Section 2.2.1)
+		if err := assertRequestOnly("@method", params, msg.IsRequest); err != nil {
+			return nil, err
 		}
-	case "https":
-		if port == "443" {
-			return []string{strings.ToLower(host)}, nil
+
+		return []string{msg.Method}, nil
+	}), nil
+}
+
+func newTargetURICanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@target-uri", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-target-uri (Section 2.2.2)
+		if err := assertRequestOnly("@target-uri", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		return []string{msg.URL.String()}, nil
+	}), nil
+}
+
+func newAuthorityCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@authority", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-authority (Section 2.2.3)
+		if err := assertRequestOnly("@authority", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		host, port, err := net.SplitHostPort(msg.Authority)
+		if err != nil {
+			// no port, just use the whole thing
+			return []string{strings.ToLower(msg.Authority)}, nil //nolint:nilerr
+		}
+
+		// default ports shall be omitted
+		switch strings.ToLower(msg.URL.Scheme) {
+		case "http":
+			if port == "80" {
+				return []string{strings.ToLower(host)}, nil
+			}
+		case "https":
+			if port == "443" {
+				return []string{strings.ToLower(host)}, nil
+			}
+		}
+
+		return []string{strings.ToLower(msg.Authority)}, nil
+	}), nil
+}
+
+func newSchemeCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@scheme", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-scheme (Section 2.2.4)
+		if err := assertRequestOnly("@scheme", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		return []string{strings.ToLower(msg.URL.Scheme)}, nil
+	}), nil
+}
+
+func newRequestTargetCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@request-target", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-request-target (Section 2.2.5)
+		if err := assertRequestOnly("@request-target", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		return []string{msg.URL.RequestURI()}, nil
+	}), nil
+}
+
+func newPathCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@path", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-path (Section 2.2.6)
+		if err := assertRequestOnly("@path", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		path := msg.URL.EscapedPath()
+		if len(path) == 0 || path[0] != '/' {
+			path = "/" + path
+		}
+
+		return []string{path}, nil
+	}), nil
+}
+
+func newQueryCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@query", params, "req"); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-query (Section 2.2.7)
+		if err := assertRequestOnly("@query", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		// absent query params means use `?`
+		return []string{"?" + msg.URL.RawQuery}, nil
+	}), nil
+}
+
+func newQueryParamCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@query-param", params, "req", "name"); err != nil {
+		return nil, err
+	}
+
+	hasName := false
+	if params != nil {
+		_, hasName = params.Get("name")
+	}
+	if !hasName {
+		return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
+	}
+
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-query-parameters (Section 2.2.8)
+		if err := assertRequestOnly("@query-param", params, msg.IsRequest); err != nil {
+			return nil, err
+		}
+
+		val, _ := params.Get("name")
+		name := val.(string) //nolint: forcetypeassert
+
+		query := msg.queryParams()
+		if !query.Has(name) {
+			return nil, fmt.Errorf("%w: expected query parameter '%s' not found", ErrCanonicalization, name)
+		}
+
+		unescaped := query[name]
+		if len(unescaped) > 1 {
+			return nil, fmt.Errorf("%w: query parameter '%s' occurs multiple times", ErrCanonicalization, name)
+		}
+
+		return []string{url.PathEscape(unescaped[0])}, nil
+	}), nil
+}
+
+func newStatusCodeCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters("@status", params); err != nil {
+		return nil, err
+	}
+
+	return canonicalizerFunc(func(msg *Message, _ *httpsfv.Params) ([]string, error) {
+		// https://www.rfc-editor.org/rfc/rfc9421.html#name-status-code (Section 2.2.9)
+		if msg.IsRequest {
+			return nil, fmt.Errorf("%w: @status not valid for requests", ErrCanonicalization)
+		}
+
+		return []string{strconv.Itoa(msg.StatusCode)}, nil
+	}), nil
+}
+
+func newHeaderCanonicalizer(header string, params *httpsfv.Params) (canonicalizer, error) {
+	if err := assertParameters(header, params, "sf", "key", "bs", "tr", "req"); err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		if _, present := params.Get("tr"); present {
+			return nil, fmt.Errorf("%w: trailer fields are not supported", ErrInvalidComponentIdentifier)
+		}
+
+		_, bs := params.Get("bs")
+		_, sf := params.Get("sf")
+		_, key := params.Get("key")
+		if bs && (sf || key) {
+			return nil, fmt.Errorf("%w: cannot combine 'bs' with 'sf' or 'key' on %s", ErrInvalidComponentIdentifier, header)
 		}
 	}
 
-	return []string{strings.ToLower(msg.Authority)}, nil
-}
-
-func canonicalizeScheme(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-scheme (Section 2.2.4)
-	if err := assertRequestOnly("@scheme", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	return []string{strings.ToLower(msg.URL.Scheme)}, nil
-}
-
-func canonicalizeRequestTarget(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-request-target (Section 2.2.5)
-	if err := assertRequestOnly("@request-target", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	return []string{msg.URL.RequestURI()}, nil
-}
-
-func canonicalizePath(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-path (Section 2.2.6)
-	if err := assertRequestOnly("@path", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	path := msg.URL.EscapedPath()
-	if len(path) == 0 || path[0] != '/' {
-		path = "/" + path
-	}
-
-	return []string{path}, nil
-}
-
-func canonicalizeQuery(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-query (Section 2.2.7)
-	if err := assertRequestOnly("@query", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	// absent query params means use `?`
-	return []string{"?" + msg.URL.RawQuery}, nil
-}
-
-func canonicalizeQueryParam(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-query-parameters (Section 2.2.8)
-	if err := assertRequestOnly("@query-param", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	val, _ := params.Get("name")
-	name := val.(string) //nolint: forcetypeassert
-
-	query := msg.queryParams()
-	if !query.Has(name) {
-		return nil, fmt.Errorf("%w: expected query parameter '%s' not found", ErrCanonicalization, name)
-	}
-
-	unescaped := query[name]
-	if len(unescaped) > 1 {
-		return nil, fmt.Errorf("%w: query parameter '%s' occurs multiple times", ErrCanonicalization, name)
-	}
-
-	return []string{url.PathEscape(unescaped[0])}, nil
-}
-
-func canonicalizeStatusCode(msg *Message, params *httpsfv.Params) ([]string, error) {
-	// https://www.rfc-editor.org/rfc/rfc9421.html#name-status-code (Section 2.2.9)
-	if err := assertResponseOnly("@status", params, msg.IsRequest); err != nil {
-		return nil, err
-	}
-
-	return []string{strconv.Itoa(msg.StatusCode)}, nil
-}
-
-func headerCanonicalizer(header string) canonicalizerFunc {
-	return func(msg *Message, params *httpsfv.Params) ([]string, error) {
+	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
 		serializer, err := newSerializer(params, msg.IsRequest)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s: %w", ErrCanonicalization, header, err)
 		}
 
 		var hdr http.Header
-
-		if err := assertParameter(header, params, msg.IsRequest); err != nil {
-			return nil, err
-		}
 
 		if _, isReq := params.Get("req"); !msg.IsRequest && isReq {
 			hdr = msg.RequestHeader
@@ -247,5 +330,5 @@ func headerCanonicalizer(header string) canonicalizerFunc {
 		}
 
 		return result, nil
-	}
+	}), nil
 }
