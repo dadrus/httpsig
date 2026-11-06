@@ -54,6 +54,7 @@ func TestNewPayloadVerifier(t *testing.T) {
 		"rsa verifier":          {key: &pk2048.PublicKey, alg: RsaPssSha256, typ: &rsaVerifier{}},
 		"ecdsa verifier":        {key: &pkp256.PublicKey, alg: EcdsaP256Sha256, typ: &ecdsaVerifier{}},
 		"hmac verifier":         {key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"message verifier":      {key: &MessageVerifierMock{}, alg: SignatureAlgorithm("custom-alg"), typ: &messageVerifierAdaptor{}},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			sig, err := newPayloadVerifier(tc.key, tc.alg)
@@ -968,6 +969,42 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, ErrParameter)
 				require.ErrorContains(t, err, "key algorithm ed25519 does not match signature algorithm hmac-sha256")
 				require.Empty(t, results)
+			},
+		},
+		"unknown algorithm with message verifier": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithCreatedTimestamp(false),
+				WithExpiresTimestamp(false),
+			},
+			msg: &Message{
+				Context:   context.Background(),
+				IsRequest: true,
+				Method:    http.MethodGet,
+				Header: http.Header{
+					"Signature-Input": []string{`sig=("@method");alg="custom-alg"`},
+					"Signature":       []string{"sig=:AQID:"},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				mockVerifier := NewMessageVerifierMock(t)
+				mockVerifier.EXPECT().VerifyMessage(
+					context.Background(),
+					[]byte("\"@method\": GET\n\"@signature-params\": (\"@method\");alg=\"custom-alg\""),
+					[]byte{1, 2, 3},
+				).Return(nil).Once()
+
+				kr.EXPECT().ResolveKey(mock.Anything, mock.Anything).
+					Return(KeyInfo{Key: Key{Algorithm: SignatureAlgorithm("custom-alg"), Material: mockVerifier}}, nil).Once()
+			},
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "sig", results[0].Label)
 			},
 		},
 		"unsupported signature key": {
