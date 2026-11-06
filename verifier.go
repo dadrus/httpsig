@@ -117,6 +117,8 @@ func newPayloadVerifier(verificationKey any, alg SignatureAlgorithm) (payloadVer
 		return newECDSAVerifier(publicKey, alg)
 	case []byte:
 		return newSymmetricSigner(publicKey, alg)
+	case MessageVerifier:
+		return &messageVerifierAdaptor{verifier: publicKey}, nil
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
