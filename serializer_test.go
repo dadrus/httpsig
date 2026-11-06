@@ -105,9 +105,10 @@ func TestRawSerialization(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		uc     string
-		input  []string
-		result []string
+		uc          string
+		input       []string
+		result      []string
+		errContains string
 	}{
 		{
 			uc:     "dictionary field",
@@ -115,9 +116,69 @@ func TestRawSerialization(t *testing.T) {
 			result: []string{"a=1,    b=2;x=1;y=2,   c=(a   b   c)"},
 		},
 		{
-			uc:     "list field",
+			uc:     "list field with surrounding whitespace",
 			input:  []string{" value,   with, lots, of,  commas, and,     spaces"},
-			result: []string{" value,   with, lots, of,  commas, and,     spaces"},
+			result: []string{"value,   with, lots, of,  commas, and,     spaces"},
+		},
+		{
+			uc:     "strip HTTP whitespace from each field value",
+			input:  []string{" \t alpha \t", "\tbeta  "},
+			result: []string{"alpha", "beta"},
+		},
+		{
+			uc:     "empty field value",
+			input:  []string{"", " \t "},
+			result: []string{"", ""},
+		},
+		{
+			uc:     "preserve internal whitespace and commas",
+			input:  []string{"alpha \t beta,  gamma"},
+			result: []string{"alpha \t beta,  gamma"},
+		},
+		{
+			uc:     "unfold obsolete line folding with preceding whitespace",
+			input:  []string{"alpha \t\r\n\t beta"},
+			result: []string{"alpha beta"},
+		},
+		{
+			uc:          "reject leading obsolete line folding",
+			input:       []string{"\r\n value"},
+			errContains: "invalid HTTP field value",
+		},
+		{
+			uc:          "reject leading obsolete line folding after whitespace",
+			input:       []string{" \t\r\n value"},
+			errContains: "invalid HTTP field value",
+		},
+		{
+			uc:          "reject non-ASCII UTF-8",
+			input:       []string{"caf\u00e9"},
+			errContains: "non-ASCII",
+		},
+		{
+			uc:          "reject non-ASCII octet",
+			input:       []string{"\xff"},
+			errContains: "non-ASCII",
+		},
+		{
+			uc:          "reject bare newline",
+			input:       []string{"alpha\nbeta"},
+			errContains: "invalid HTTP field value",
+		},
+		{
+			uc:          "reject NUL",
+			input:       []string{"alpha\x00beta"},
+			errContains: "invalid HTTP field value",
+		},
+		{
+			uc:          "reject other ASCII control characters",
+			input:       []string{"alpha\x01beta"},
+			errContains: "invalid HTTP field value",
+		},
+		{
+			uc:          "reject DEL",
+			input:       []string{"alpha\x7fbeta"},
+			errContains: "invalid HTTP field value",
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
@@ -127,8 +188,14 @@ func TestRawSerialization(t *testing.T) {
 			require.NoError(t, err)
 
 			result, err := s.serialize(tc.input)
-			require.NoError(t, err)
+			if tc.errContains != "" {
+				require.ErrorIs(t, err, errSerialization)
+				require.ErrorContains(t, err, tc.errContains)
 
+				return
+			}
+
+			require.NoError(t, err)
 			assert.Equal(t, tc.result, result)
 		})
 	}

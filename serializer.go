@@ -12,7 +12,7 @@ import (
 var errSerialization = errors.New("serialization error")
 
 //nolint:gochecknoglobals
-var byteSequenceObsFold = regexp.MustCompile("[ \t]*\r\n[ \t]+")
+var fieldValueObsFold = regexp.MustCompile("[ \t]*\r\n[ \t]+")
 
 type serializer interface {
 	serialize(v []string) ([]string, error)
@@ -41,8 +41,47 @@ func newSerializer(params *httpsfv.Params, isRequest bool) (serializer, error) {
 
 type rawSerializer struct{}
 
-func (s *rawSerializer) serialize(v []string) ([]string, error) {
-	return v, nil
+//nolint:cyclop
+func (s *rawSerializer) serialize(values []string) ([]string, error) {
+	var normalized []string
+
+	for i, sv := range values {
+		// RFC 9421, Sections 2.1 and 2.5: normalize field values and
+		// ensure that the signature base contains only ASCII.
+		value := strings.Trim(sv, " \t")
+		if strings.HasPrefix(value, "\r\n") {
+			return nil, fmt.Errorf("%w: invalid HTTP field value", errSerialization)
+		}
+
+		if strings.Contains(value, "\r\n") {
+			value = fieldValueObsFold.ReplaceAllString(value, " ")
+		}
+
+		for j := range len(value) {
+			ch := value[j]
+			if ch >= 0x80 { //nolint:mnd
+				return nil, fmt.Errorf("%w: non-ASCII HTTP field value (use 'bs' for binary values)", errSerialization)
+			}
+
+			if (ch < 0x20 && ch != '\t') || ch == 0x7f {
+				return nil, fmt.Errorf("%w: invalid HTTP field value", errSerialization)
+			}
+		}
+
+		if value != sv && normalized == nil {
+			normalized = append([]string(nil), values...)
+		}
+
+		if normalized != nil {
+			normalized[i] = value
+		}
+	}
+
+	if normalized != nil {
+		return normalized, nil
+	}
+
+	return values, nil
 }
 
 type byteSequenceSerializer struct{}
@@ -54,7 +93,7 @@ func (s *byteSequenceSerializer) serialize(v []string) ([]string, error) {
 		// RFC 9421, Section 2.1.3: preserve field-value bytes except for
 		// surrounding HTTP whitespace and obsolete line folding.
 		value := strings.Trim(sv, " \t")
-		value = byteSequenceObsFold.ReplaceAllString(value, " ")
+		value = fieldValueObsFold.ReplaceAllString(value, " ")
 		item := httpsfv.NewItem([]byte(value))
 
 		marshalled, err := httpsfv.Marshal(item)
