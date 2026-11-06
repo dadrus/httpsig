@@ -216,6 +216,7 @@ func (v *verifier) applicableSignatures(refs *httpsfv.Dictionary) ([]applicableS
 
 	for _, label := range refs.Names() {
 		member, _ := refs.Get(label)
+
 		list := member.(httpsfv.InnerList) //nolint:forcetypeassert
 		if !v.validateAllSigs {
 			tag, present := signatureTag(list)
@@ -277,6 +278,7 @@ func (v *verifier) hasMissingSignatures(sigRefs *httpsfv.Dictionary) bool {
 
 		for _, label := range sigRefs.Names() {
 			member, _ := sigRefs.Get(label)
+
 			tag, tagPresent := signatureTag(member.(httpsfv.InnerList)) //nolint:forcetypeassert
 			if tagPresent && tag == sigTag {
 				present = true
