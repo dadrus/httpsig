@@ -46,6 +46,11 @@ type Verifier interface {
 	Verify(msg *Message, opts ...VerifyOption) (VerificationResult, error)
 }
 
+type applicableSignature struct {
+	label string
+	input *signatureInput
+}
+
 // NewVerifier creates a Verifier instance.
 // Without WithValidateAllSignatures, at least one WithRequiredTag is necessary.
 // By default, created and expires are required and signatures may be at most
@@ -159,7 +164,8 @@ func (v *verifier) Verify(msg *Message, opts ...VerifyOption) (VerificationResul
 
 	// do the actual verification
 	results := make([]VerifiedSignature, 0, len(applicableSignatures))
-	for name, params := range applicableSignatures {
+	for _, ref := range applicableSignatures {
+		name, params := ref.label, ref.input
 		tag, _ := params.tag()
 
 		policy, exists := policiesByTag[tag]
@@ -205,27 +211,36 @@ func (v *verifier) policiesForCall(opts []VerifyOption) (map[string]*verificatio
 	return result, nil
 }
 
-func (v *verifier) applicableSignatures(refs map[string]*signatureInput) (map[string]*signatureInput, error) {
-	if !v.validateAllSigs {
-		for name, input := range refs {
-			tag, present := input.tag()
-			if !present {
-				delete(refs, name)
+func (v *verifier) applicableSignatures(refs *httpsfv.Dictionary) ([]applicableSignature, error) {
+	result := make([]applicableSignature, 0, len(refs.Names()))
 
+	for _, label := range refs.Names() {
+		member, _ := refs.Get(label)
+		list := member.(httpsfv.InnerList) //nolint:forcetypeassert
+		if !v.validateAllSigs {
+			tag, present := signatureTag(list)
+			if !present {
 				continue
 			}
 
 			if _, required := v.tagPolicies[tag]; !required {
-				delete(refs, name)
+				continue
 			}
 		}
+
+		si, err := parseSignatureInput(list)
+		if err != nil {
+			return nil, fmt.Errorf("%w: label %q: %w", ErrMalformedData, label, err)
+		}
+
+		result = append(result, applicableSignature{label, si})
 	}
 
-	if len(refs) == 0 {
+	if len(result) == 0 {
 		return nil, &NoApplicableSignatureError{}
 	}
 
-	return refs, nil
+	return result, nil
 }
 
 func (v *verifier) negotiateSignatureParameters(msg *Message, policiesByTag map[string]*verificationPolicy) error {
@@ -250,7 +265,7 @@ func (v *verifier) negotiateSignatureParameters(msg *Message, policiesByTag map[
 	return &NoApplicableSignatureError{headerToAdd: hdr}
 }
 
-func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureInput) bool {
+func (v *verifier) hasMissingSignatures(sigRefs *httpsfv.Dictionary) bool {
 	for sigTag := range v.tagPolicies {
 		if len(sigTag) == 0 {
 			// empty tag is used for a policy applying to all signatures
@@ -260,8 +275,9 @@ func (v *verifier) hasMissingSignatures(sigRefs map[string]*signatureInput) bool
 
 		var present bool
 
-		for _, sigRef := range sigRefs {
-			tag, tagPresent := sigRef.tag()
+		for _, label := range sigRefs.Names() {
+			member, _ := sigRefs.Get(label)
+			tag, tagPresent := signatureTag(member.(httpsfv.InnerList)) //nolint:forcetypeassert
 			if tagPresent && tag == sigTag {
 				present = true
 
@@ -328,33 +344,6 @@ func (v *verifier) verifySignature(
 	}, nil
 }
 
-func getSignatureReferences(values []string) (map[string]*signatureInput, error) {
-	inputDict, err := httpsfv.UnmarshalDictionary(values)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
-	}
-
-	sigRefs := make(map[string]*signatureInput, len(inputDict.Names()))
-
-	for _, label := range inputDict.Names() {
-		m, _ := inputDict.Get(label)
-
-		sigParams, ok := m.(httpsfv.InnerList)
-		if !ok {
-			return nil, fmt.Errorf("%w: unexpected signature parameters format", ErrMalformedData)
-		}
-
-		si, err := parseSignatureInput(sigParams)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
-		}
-
-		sigRefs[label] = si
-	}
-
-	return sigRefs, nil
-}
-
 func (v *verifier) extractSignature(dict *httpsfv.Dictionary, name string) ([]byte, error) {
 	sigItem, ok := dict.Get(name)
 	if !ok {
@@ -372,4 +361,37 @@ func (v *verifier) extractSignature(dict *httpsfv.Dictionary, name string) ([]by
 	}
 
 	return signatureBytes, nil
+}
+
+func signatureTag(list httpsfv.InnerList) (string, bool) {
+	if list.Params == nil {
+		return "", false
+	}
+
+	value, present := list.Params.Get(string(Tag))
+	if !present {
+		return "", false
+	}
+
+	tag, ok := value.(string)
+
+	return tag, ok
+}
+
+func getSignatureReferences(values []string) (*httpsfv.Dictionary, error) {
+	inputDict, err := httpsfv.UnmarshalDictionary(values)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
+	}
+
+	// Check member types without converting values that require semantic validation.
+	for _, label := range inputDict.Names() {
+		m, _ := inputDict.Get(label)
+
+		if _, ok := m.(httpsfv.InnerList); !ok {
+			return nil, fmt.Errorf("%w: unexpected signature parameters format", ErrMalformedData)
+		}
+	}
+
+	return inputDict, nil
 }
