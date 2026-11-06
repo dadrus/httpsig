@@ -70,7 +70,6 @@ func TestToComponentIdentifiers(t *testing.T) {
 				bytesValue, ok := ci[0].Params.Get("bytes")
 				require.True(t, ok)
 				assert.Equal(t, []byte{1, 2, 3}, bytesValue)
-
 			},
 		},
 		"valid": {

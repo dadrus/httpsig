@@ -427,6 +427,7 @@ func TestNewSignatureRequest(t *testing.T) {
 
 	contentDigest := httpsfv.NewItem("content-digest")
 	contentDigest.Params.Add("req", true)
+
 	queryParam := httpsfv.NewItem("@query-param")
 	queryParam.Params.Add("name", "a;b")
 

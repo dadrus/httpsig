@@ -507,6 +507,7 @@ func TestSignatureRequirementsFromInnerList(t *testing.T) {
 				Items: func() []httpsfv.Item {
 					first := httpsfv.NewItem("@query-param")
 					first.Params.Add("name", "foo")
+
 					second := httpsfv.NewItem("@query-param")
 					second.Params.Add("name", "bar")
 
