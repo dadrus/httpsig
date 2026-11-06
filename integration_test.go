@@ -59,3 +59,60 @@ func TestSignAndVerifyParsedSignatureRequest(t *testing.T) {
 	assert.Equal(t, request.Nonce, nonce)
 	assert.Equal(t, request.Label, verified[0].Label)
 }
+
+func TestParseAcceptSignatureBuilderOutput(t *testing.T) {
+	t.Parallel()
+
+	builder, err := NewAcceptSignature(
+		WithLabel("bar"),
+		WithKeyID("foo"),
+		WithSignatureAlgorithm(EcdsaP256Sha256),
+		WithComponents("@status", "content-digest;req", `@query-param;name="Pet"`),
+		WithTag("awesome-app"),
+		WithParameter("audience", "service-a"),
+		WithExpiresTimestamp(false),
+	)
+	require.NoError(t, err)
+
+	header := http.Header{}
+	require.NoError(t, builder.Build(context.Background(), header, WithParameter(Nonce, "abc")))
+
+	requests, err := ParseAcceptSignature(header)
+
+	require.NoError(t, err)
+	assert.Equal(t, []SignatureRequest{{
+		Label:      "bar",
+		Components: []string{`"@status"`, `"content-digest";req`, `"@query-param";name="Pet"`},
+		KeyID:      "foo",
+		Algorithm:  EcdsaP256Sha256,
+		Tag:        "awesome-app",
+		Nonce:      "abc",
+		Created:    true,
+		Extensions: SignatureParameters{"audience": "service-a"},
+	}}, requests)
+}
+
+func TestParsedComponentsRoundTripThroughWithComponents(t *testing.T) {
+	t.Parallel()
+
+	const field = `sig=("@status" "content-digest";req "@query-param";name="a;b" "a;req" "b\"c" "d\\e");created`
+
+	requests, err := ParseAcceptSignature(http.Header{headerAcceptSignature: {field}})
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	assert.Equal(t, []string{
+		`"@status"`, `"content-digest";req`, `"@query-param";name="a;b"`,
+		`"a;req"`, `"b\"c"`, `"d\\e"`,
+	}, requests[0].Components)
+
+	builder, err := NewAcceptSignature(
+		WithComponents(requests[0].Components...),
+		WithExpiresTimestamp(false),
+	)
+	require.NoError(t, err)
+
+	header := http.Header{}
+	require.NoError(t, builder.Build(context.Background(), header))
+
+	assert.Equal(t, field, header.Get(headerAcceptSignature))
+}
