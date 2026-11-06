@@ -444,7 +444,7 @@ func TestParseAcceptSignature(t *testing.T) {
 			},
 			expected: []SignatureRequest{{
 				Label:      "sig1",
-				Components: []string{"@method", "@target-uri", "content-digest"},
+				Components: []string{`"@method"`, `"@target-uri"`, `"content-digest"`},
 				KeyID:      "test-key",
 				Algorithm:  Ed25519,
 				Tag:        "app-123",
@@ -476,7 +476,7 @@ func TestParseAcceptSignature(t *testing.T) {
 			values: []string{`sig=("content-digest";req "@query-param";name="a;b" "x-dict";key="k";sf)`},
 			expected: []SignatureRequest{{
 				Label:      "sig",
-				Components: []string{`content-digest;req`, `@query-param;name="a;b"`, `x-dict;key="k";sf`},
+				Components: []string{`"content-digest";req`, `"@query-param";name="a;b"`, `"x-dict";key="k";sf`},
 			}},
 		},
 		"component names requiring quotes": {
@@ -505,15 +505,15 @@ func TestParseAcceptSignature(t *testing.T) {
 		"multiple members keep their order": {
 			values: []string{`zeta=("@status"), alpha=("@method");tag="a"`},
 			expected: []SignatureRequest{
-				{Label: "zeta", Components: []string{"@status"}},
-				{Label: "alpha", Components: []string{"@method"}, Tag: "a"},
+				{Label: "zeta", Components: []string{`"@status"`}},
+				{Label: "alpha", Components: []string{`"@method"`}, Tag: "a"},
 			},
 		},
 		"multiple field lines": {
 			values: []string{`a=("@status")`, `b=("@method")`},
 			expected: []SignatureRequest{
-				{Label: "a", Components: []string{"@status"}},
-				{Label: "b", Components: []string{"@method"}},
+				{Label: "a", Components: []string{`"@status"`}},
+				{Label: "b", Components: []string{`"@method"`}},
 			},
 		},
 		"not a dictionary": {
@@ -559,7 +559,7 @@ func TestParseAcceptSignature(t *testing.T) {
 			values: []string{
 				`bad=("x-dict";key="foo";sf "x-dict";sf;key="foo"), good=("@method")`,
 			},
-			expected:    []SignatureRequest{{Label: "good", Components: []string{"@method"}}},
+			expected:    []SignatureRequest{{Label: "good", Components: []string{`"@method"`}}},
 			err:         []error{ErrMalformedData},
 			errContains: []string{"duplicate component identifier"},
 		},
@@ -567,20 +567,20 @@ func TestParseAcceptSignature(t *testing.T) {
 			values: []string{`sig=("@query-param";name="foo" "@query-param";name="bar")`},
 			expected: []SignatureRequest{{
 				Label:      "sig",
-				Components: []string{`@query-param;name="foo"`, `@query-param;name="bar"`},
+				Components: []string{`"@query-param";name="foo"`, `"@query-param";name="bar"`},
 			}},
 		},
 		"unusable member keeps the usable ones": {
 			values: []string{`first=("@status"), bad=("@foo"), last=("@method")`},
 			expected: []SignatureRequest{
-				{Label: "first", Components: []string{"@status"}},
-				{Label: "last", Components: []string{"@method"}},
+				{Label: "first", Components: []string{`"@status"`}},
+				{Label: "last", Components: []string{`"@method"`}},
 			},
 			err: []error{ErrMalformedData, ErrUnsupportedComponentIdentifier},
 		},
 		"every unusable member is reported": {
 			values:   []string{`good=("@status"), scalar=1, comp=("@foo"), param=();created=1`},
-			expected: []SignatureRequest{{Label: "good", Components: []string{"@status"}}},
+			expected: []SignatureRequest{{Label: "good", Components: []string{`"@status"`}}},
 			err: []error{
 				ErrMalformedData,
 				ErrUnsupportedComponentIdentifier,
@@ -664,7 +664,7 @@ func TestParseAcceptSignatureBuilderOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []SignatureRequest{{
 		Label:      "bar",
-		Components: []string{"@status", "content-digest;req", `@query-param;name="Pet"`},
+		Components: []string{`"@status"`, `"content-digest";req`, `"@query-param";name="Pet"`},
 		KeyID:      "foo",
 		Algorithm:  EcdsaP256Sha256,
 		Tag:        "awesome-app",
@@ -682,6 +682,10 @@ func TestParsedComponentsRoundTripThroughWithComponents(t *testing.T) {
 	requests, err := ParseAcceptSignature(http.Header{headerAcceptSignature: {field}})
 	require.NoError(t, err)
 	require.Len(t, requests, 1)
+	assert.Equal(t, []string{
+		`"@status"`, `"content-digest";req`, `"@query-param";name="a;b"`,
+		`"a;req"`, `"b\"c"`, `"d\\e"`,
+	}, requests[0].Components)
 
 	builder, err := NewAcceptSignature(
 		WithComponents(requests[0].Components...),

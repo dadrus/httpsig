@@ -152,7 +152,8 @@ type SignatureRequest struct {
 	Label string
 
 	// Components lists the requested component identifiers in their requested
-	// order, in the form accepted by WithComponents.
+	// order, serialized as Structured Fields Items. Each identifier can be
+	// passed to WithComponents.
 	Components []string
 
 	// KeyID is the requested keyid parameter. It is empty if not requested.
@@ -237,9 +238,9 @@ func newSignatureRequest(label string, list httpsfv.InnerList) (SignatureRequest
 	components := make([]string, len(requirements.identifiers))
 
 	for i, identifier := range requirements.identifiers {
-		component, err := identifier.optionValue()
+		component, err := httpsfv.Marshal(identifier.Item)
 		if err != nil {
-			return SignatureRequest{}, err
+			return SignatureRequest{}, fmt.Errorf("%w: %w", ErrInvalidComponentIdentifier, err)
 		}
 
 		components[i] = component

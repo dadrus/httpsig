@@ -73,22 +73,6 @@ func newComponentIdentifier(item httpsfv.Item) (*componentIdentifier, error) {
 	return &componentIdentifier{Item: item, c: canonicalizer}, nil
 }
 
-// optionValue returns the identifier in the form accepted by WithComponents.
-// The name stays quoted if removing the quotes would change its meaning.
-func (c *componentIdentifier) optionValue() (string, error) {
-	marshalled, err := httpsfv.Marshal(c.Item)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidComponentIdentifier, err)
-	}
-
-	name := c.Value.(string) //nolint: forcetypeassert
-	if strings.ContainsAny(name, `";\`) {
-		return marshalled, nil
-	}
-
-	return name + strings.TrimPrefix(marshalled, `"`+name+`"`), nil
-}
-
 // equal reports whether two component identifiers have the same name and
 // parameters, regardless of parameter order.
 func (c *componentIdentifier) equal(other *componentIdentifier) bool {
