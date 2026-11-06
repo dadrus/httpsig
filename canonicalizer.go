@@ -37,6 +37,8 @@ func assertRequestOnly(name string, params *httpsfv.Params, isRequest bool) erro
 
 // assertParameters checks whether parameters are applicable to a
 // component and have the required RFC 9421 types and values.
+//
+//nolint:cyclop
 func assertParameters(name string, params *httpsfv.Params, allowed ...string) error {
 	if params == nil {
 		return nil
@@ -44,7 +46,8 @@ func assertParameters(name string, params *httpsfv.Params, allowed ...string) er
 
 	for _, param := range params.Names() {
 		if !slices.Contains(allowed, param) {
-			return fmt.Errorf("%w: parameter %q is not applicable to %s", ErrInvalidComponentIdentifier, param, name)
+			return fmt.Errorf("%w: parameter %q is not applicable to %s",
+				ErrInvalidComponentIdentifier, param, name)
 		}
 
 		value, _ := params.Get(param)
@@ -53,19 +56,23 @@ func assertParameters(name string, params *httpsfv.Params, allowed ...string) er
 		case "sf", "bs", "tr", "req":
 			enabled, ok := value.(bool)
 			if !ok || !enabled {
-				return fmt.Errorf("%w: %s parameter %q must be true", ErrInvalidComponentIdentifier, name, param)
+				return fmt.Errorf("%w: %s parameter %q must be true",
+					ErrInvalidComponentIdentifier, name, param)
 			}
 		case "key":
 			key, ok := value.(string)
 			if !ok || key == "" {
-				return fmt.Errorf("%w: %s parameter %q must be a non-empty string", ErrInvalidComponentIdentifier, name, param)
+				return fmt.Errorf("%w: %s parameter %q must be a non-empty string",
+					ErrInvalidComponentIdentifier, name, param)
 			}
 		case "name":
 			if _, ok := value.(string); !ok {
-				return fmt.Errorf("%w: %s parameter %q must be a string", ErrInvalidComponentIdentifier, name, param)
+				return fmt.Errorf("%w: %s parameter %q must be a string",
+					ErrInvalidComponentIdentifier, name, param)
 			}
 		default:
-			return fmt.Errorf("%w: %s has unsupported parameter %q", ErrInvalidComponentIdentifier, name, param)
+			return fmt.Errorf("%w: %s has unsupported parameter %q",
+				ErrInvalidComponentIdentifier, name, param)
 		}
 	}
 
@@ -240,6 +247,7 @@ func newQueryParamCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 	if params != nil {
 		_, hasName = params.Get("name")
 	}
+
 	if !hasName {
 		return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
 	}
@@ -282,6 +290,7 @@ func newStatusCodeCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 	}), nil
 }
 
+//nolint:cyclop
 func newHeaderCanonicalizer(header string, params *httpsfv.Params) (canonicalizer, error) {
 	if err := assertParameters(header, params, "sf", "key", "bs", "tr", "req"); err != nil {
 		return nil, err
@@ -294,9 +303,11 @@ func newHeaderCanonicalizer(header string, params *httpsfv.Params) (canonicalize
 
 		_, bs := params.Get("bs")
 		_, sf := params.Get("sf")
+
 		_, key := params.Get("key")
 		if bs && (sf || key) {
-			return nil, fmt.Errorf("%w: cannot combine 'bs' with 'sf' or 'key' on %s", ErrInvalidComponentIdentifier, header)
+			return nil, fmt.Errorf("%w: cannot combine 'bs' with 'sf' or 'key' on %s",
+				ErrInvalidComponentIdentifier, header)
 		}
 	}
 
