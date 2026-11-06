@@ -51,29 +51,29 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedComponentIdentifier)
 			},
 		},
-		"preserving structured field parameter types": {
-			identifiers: []string{`x-test;string="abc";token=abc;bytes=:AQID:`},
+		"preserving supported parameter types": {
+			identifiers: []string{`x-test;key="abc";sf;req`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
 				t.Helper()
 
 				require.NoError(t, err)
 				require.Len(t, ci, 1)
 
-				stringValue, ok := ci[0].Params.Get("string")
-				require.True(t, ok)
-				assert.Equal(t, "abc", stringValue)
+				key, present := ci[0].Params.Get("key")
+				require.True(t, present)
+				assert.Equal(t, "abc", key)
 
-				tokenValue, ok := ci[0].Params.Get("token")
-				require.True(t, ok)
-				assert.Equal(t, httpsfv.Token("abc"), tokenValue)
+				sf, present := ci[0].Params.Get("sf")
+				require.True(t, present)
+				assert.Equal(t, true, sf)
 
-				bytesValue, ok := ci[0].Params.Get("bytes")
-				require.True(t, ok)
-				assert.Equal(t, []byte{1, 2, 3}, bytesValue)
+				req, present := ci[0].Params.Get("req")
+				require.True(t, present)
+				assert.Equal(t, true, req)
 			},
 		},
 		"valid": {
-			identifiers: []string{"@method;foo=bar", "@status", `@query-param;name="Pet"`},
+			identifiers: []string{"@method;req", "@status", `@query-param;name="Pet"`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
 				t.Helper()
 
@@ -81,9 +81,9 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.Len(t, ci, 3)
 
 				assert.Equal(t, "@method", ci[0].Value.(string))
-				res, ok := ci[0].Params.Get("foo")
+				res, ok := ci[0].Params.Get("req")
 				require.True(t, ok)
-				require.Equal(t, httpsfv.Token("bar"), res)
+				require.Equal(t, true, res)
 				assert.NotNil(t, ci[0].c)
 
 				assert.Equal(t, "@status", ci[1].Value.(string))
@@ -185,7 +185,7 @@ func TestNewComponentIdentifier(t *testing.T) {
 		"valid": {
 			item: func() httpsfv.Item {
 				item := httpsfv.NewItem("@method")
-				item.Params.Add("foo", []byte("bar"))
+				item.Params.Add("req", true)
 
 				return item
 			}(),
@@ -195,9 +195,9 @@ func TestNewComponentIdentifier(t *testing.T) {
 				require.NoError(t, err)
 				assert.NotNil(t, ci.c)
 
-				val, ok := ci.Params.Get("foo")
+				val, ok := ci.Params.Get("req")
 				require.True(t, ok)
-				assert.Equal(t, []byte("bar"), val)
+				assert.Equal(t, true, val)
 			},
 		},
 	} {
@@ -227,8 +227,8 @@ func TestComponentIdentifierEqual(t *testing.T) {
 			second: `x-second`,
 		},
 		"different parameter names": {
-			first:  `x-test;first="foo"`,
-			second: `x-test;second="foo"`,
+			first:  `x-test;sf`,
+			second: `x-test;bs`,
 		},
 		"different parameter counts": {
 			first:  `x-test;req`,
