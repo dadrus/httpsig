@@ -65,7 +65,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 	}
 
 	globalPolicy := &verificationPolicy{
-		maxAge:       30 * time.Second, //nolint:mnd
+		maxAge:       new(30 * time.Second), //nolint:mnd
 		reqExpiresTS: new(true),
 		reqCreatedTS: new(true),
 	}
@@ -117,6 +117,8 @@ func newPayloadVerifier(verificationKey any, alg SignatureAlgorithm) (payloadVer
 		return newECDSAVerifier(publicKey, alg)
 	case []byte:
 		return newSymmetricSigner(publicKey, alg)
+	case MessageVerifier:
+		return &messageVerifierAdaptor{verifier: publicKey}, nil
 	default:
 		return nil, ErrUnsupportedKeyType
 	}

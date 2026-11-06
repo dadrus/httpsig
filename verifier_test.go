@@ -54,6 +54,7 @@ func TestNewPayloadVerifier(t *testing.T) {
 		"rsa verifier":          {key: &pk2048.PublicKey, alg: RsaPssSha256, typ: &rsaVerifier{}},
 		"ecdsa verifier":        {key: &pkp256.PublicKey, alg: EcdsaP256Sha256, typ: &ecdsaVerifier{}},
 		"hmac verifier":         {key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"message verifier":      {key: &MessageVerifierMock{}, alg: SignatureAlgorithm("custom-alg"), typ: &messageVerifierAdaptor{}},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			sig, err := newPayloadVerifier(tc.key, tc.alg)
@@ -186,7 +187,8 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 			},
 		},
 		"with global defaults without signature negotiation": {
@@ -209,7 +211,8 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 				assert.Nil(t, exp.asb)
 			},
 		},
@@ -238,7 +241,8 @@ func TestNewVerifier(t *testing.T) {
 				assert.Len(t, exp.identifiers, 2)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
 				assert.Equal(t, "content-digest", exp.identifiers[1].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 				require.NotNil(t, exp.asb)
 				assert.Nil(t, exp.asb.nonceGetter)
 				assert.Equal(t, "sig", exp.asb.label)
@@ -275,13 +279,15 @@ func TestNewVerifier(t *testing.T) {
 				exp := v.tagPolicies[""]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@method", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Minute, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Minute, *exp.tolerance)
 
 				require.Contains(t, v.tagPolicies, "test")
 				exp = v.tagPolicies["test"]
 				assert.Len(t, exp.identifiers, 1)
 				assert.Equal(t, "@status", exp.identifiers[0].Value)
-				assert.Equal(t, 1*time.Second, exp.tolerance)
+				require.NotNil(t, exp.tolerance)
+				assert.Equal(t, 1*time.Second, *exp.tolerance)
 			},
 		},
 		"parameter rules inherited from global configuration": {
@@ -465,9 +471,6 @@ func TestNewVerifier(t *testing.T) {
 }
 
 func TestVerifierVerify(t *testing.T) {
-	// used by RFC9421 in test vectors
-	currentTime = func() time.Time { return time.Unix(1618884473, 0) }
-
 	testURL, err := url.Parse("http://example.com/foo?param=Value&Pet=dog")
 	require.NoError(t, err)
 
@@ -966,6 +969,42 @@ func TestVerifierVerify(t *testing.T) {
 				require.ErrorIs(t, err, ErrParameter)
 				require.ErrorContains(t, err, "key algorithm ed25519 does not match signature algorithm hmac-sha256")
 				require.Empty(t, results)
+			},
+		},
+		"unknown algorithm with message verifier": {
+			opts: []VerifierOption{
+				WithValidateAllSignatures(),
+				WithCreatedTimestamp(false),
+				WithExpiresTimestamp(false),
+			},
+			msg: &Message{
+				Context:   context.Background(),
+				IsRequest: true,
+				Method:    http.MethodGet,
+				Header: http.Header{
+					"Signature-Input": []string{`sig=("@method");alg="custom-alg"`},
+					"Signature":       []string{"sig=:AQID:"},
+				},
+			},
+			configureResolver: func(t *testing.T, kr *KeyResolverMock) {
+				t.Helper()
+
+				mockVerifier := NewMessageVerifierMock(t)
+				mockVerifier.EXPECT().VerifyMessage(
+					context.Background(),
+					[]byte("\"@method\": GET\n\"@signature-params\": (\"@method\");alg=\"custom-alg\""),
+					[]byte{1, 2, 3},
+				).Return(nil).Once()
+
+				kr.EXPECT().ResolveKey(mock.Anything, mock.Anything).
+					Return(KeyInfo{Key: Key{Algorithm: SignatureAlgorithm("custom-alg"), Material: mockVerifier}}, nil).Once()
+			},
+			assert: func(t *testing.T, err error, results VerificationResult) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				assert.Equal(t, "sig", results[0].Label)
 			},
 		},
 		"unsupported signature key": {
@@ -1889,14 +1928,18 @@ func TestVerifierVerify(t *testing.T) {
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			kr := NewKeyResolverMock(t)
-			tc.configureResolver(t, kr)
+			withRFC9421Time(t, func(t *testing.T) {
+				t.Helper()
 
-			v, err := NewVerifier(kr, tc.opts...)
-			require.NoError(t, err)
+				kr := NewKeyResolverMock(t)
+				tc.configureResolver(t, kr)
 
-			results, err := v.Verify(tc.msg, tc.verifyOpts...)
-			tc.assert(t, err, results)
+				v, err := NewVerifier(kr, tc.opts...)
+				require.NoError(t, err)
+
+				results, err := v.Verify(tc.msg, tc.verifyOpts...)
+				tc.assert(t, err, results)
+			})
 		})
 	}
 

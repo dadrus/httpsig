@@ -26,6 +26,8 @@ func newPayloadSigner(signingKey any, alg SignatureAlgorithm) (payloadSigner, er
 		return newECDSASigner(key, alg)
 	case []byte:
 		return newSymmetricSigner(key, alg)
+	case MessageSigner:
+		return &messageSignerAdaptor{signer: key}, nil
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
@@ -42,7 +44,7 @@ type Signer interface {
 }
 
 // NewSigner creates a Signer using key for cryptographic signing. The key
-// must contain private or symmetric material compatible with its algorithm.
+// must contain compatible private, symmetric, or application-provided signing material.
 // By default, signatures use label "sig", include created, and expire
 // after 30 seconds. The alg, keyid, tag, and nonce parameters are omitted.
 // When generating Content-Digest, the signer uses both SHA-256 and SHA-512
@@ -73,8 +75,13 @@ func NewSigner(key Key, opts ...SignerOption) (Signer, error) {
 		switch key.Algorithm {
 		case RsaPssSha512, RsaPkcs1v15Sha256, HmacSha256, EcdsaP256Sha256, EcdsaP384Sha384, Ed25519:
 		default:
-			return nil, fmt.Errorf("%w: %s is not registered for HTTP Message Signatures",
-				ErrUnsupportedAlgorithm, key.Algorithm)
+			// Message signers may use algorithms unknown to httpsig.
+			switch key.Material.(type) {
+			case MessageSigner:
+			default:
+				return nil, fmt.Errorf("%w: %s is not registered for HTTP Message Signatures",
+					ErrUnsupportedAlgorithm, key.Algorithm)
+			}
 		}
 	}
 
@@ -153,7 +160,7 @@ func (s *signer) Sign(msg *Message, opts ...SignOption) (http.Header, error) {
 }
 
 func (s *signer) signatureInput(opts signOptions) *signatureInput {
-	created := currentTime().UTC()
+	created := time.Now().UTC()
 
 	params := httpsfv.NewParams()
 	params.Add(string(Created), created.Unix())

@@ -4,9 +4,17 @@
 
 ## Introduction and Scope
 
-`httpsig` is a library for signing and verifying HTTP requests and responses according to [RFC 9421 (HTTP Message Signatures)](https://www.rfc-editor.org/rfc/rfc9421.html). It combines reusable signing and verification policies with support for application-specific signature requirements and signature negotiation using `Accept-Signature`.
+`httpsig` is a library for signing and verifying HTTP requests and responses according to [RFC 9421 (HTTP Message Signatures)](https://www.rfc-editor.org/rfc/rfc9421.html).
 
-The `Message` abstraction keeps these capabilities independent of any particular HTTP framework. For API details and option semantics, see the [Go reference](https://pkg.go.dev/github.com/dadrus/httpsig).
+Its key features include:
+
+- **Policy-based signing and verification:** Reusable policies for covered components, signature parameters, tags, and validity constraints.
+- **Message integrity:** Automatic generation and verification of `Content-Digest` to protect HTTP message bodies.
+- **Signature negotiation:** Support for requesting signatures via `Accept-Signature` and deriving signature requirements from verification policies.
+- **Framework independence:** A `Message` abstraction that enables integration with `net/http`, Fiber, other HTTP frameworks, and proxy-based services.
+- **Cryptographic agility:** Support for custom signing and verification implementations, allowing applications to use cryptographic algorithms and key management systems (HSMs and KMSs) independently of the library's built-in support (see [Cryptographic Agility](#cryptographic-agility)).
+
+For API details and option semantics, see the [Go reference](https://pkg.go.dev/github.com/dadrus/httpsig). For known limitations and the current scope of RFC 9421 support, see [Limitations and Compliance](#limitations-and-compliance).
 
 ## Usage
 
@@ -305,6 +313,125 @@ For automatic negotiation, the configured `NonceGetter` runs while `Verify` prep
 
 A `Signer` or `Verifier` represents a reusable signing or verification policy. Create an instance once per policy and reuse it across messages. This allows most of the configuration work to happen upfront, keeping the per-message overhead low. Message-specific values can be supplied through per-call options.
 
+## Cryptographic Agility
+
+`httpsig` supports custom signing and verification implementations through the `MessageSigner` and `MessageVerifier` interfaces. This allows applications to use cryptographic algorithms (e.g., PQC) and key management systems (HSMs and KMSs) independently of the library's built-in support.
+
+The library constructs the [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421.html) signature base and passes it unchanged to the application-provided implementation, which is responsible for the entire cryptographic operation, including hashing and signature encoding.
+
+### ML-DSA
+
+The following example demonstrates how to use ML-DSA, available in the Go standard library since Go 1.27, without requiring `httpsig` itself to target that Go version.
+
+First, define adapters for signing and verification:
+
+```go
+type mlDSASigner mldsa.PrivateKey
+
+func (s *mlDSASigner) SignMessage(_ context.Context, message []byte) ([]byte, error) {
+    return (*mldsa.PrivateKey)(s).Sign(nil, message, &mldsa.Options{})
+}
+
+type mlDSAVerifier mldsa.PublicKey
+
+func (v *mlDSAVerifier) VerifyMessage(_ context.Context, message, signature []byte) error {
+    return mldsa.Verify((*mldsa.PublicKey)(v), message, signature, &mldsa.Options{})
+}
+```
+
+These adapters can then be used directly with the existing signing and verification APIs:
+
+```go
+// Generate an ML-DSA key pair.
+privateKey, err := mldsa.GenerateKey(mldsa.MLDSA44())
+// error handling
+
+// Create a signer.
+signer, err := httpsig.NewSigner(
+    httpsig.Key{
+        Material:  (*mlDSASigner)(privateKey),
+        Algorithm: "ml-dsa-44",
+    },
+    httpsig.WithKeyID("demo-ml-dsa-44"),
+    httpsig.WithAlg(),
+    httpsig.WithComponents("@method", "@path"),
+)
+// error handling
+
+req, err := ... // create the request
+
+// Sign the request.
+req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
+// error handling
+
+// Create a verifier.
+verifier, err := httpsig.NewVerifier(
+    httpsig.Key{
+        Material:  (*mlDSAVerifier)(privateKey.PublicKey()),
+        Algorithm: "ml-dsa-44",
+    },
+    httpsig.WithValidateAllSignatures(),
+    httpsig.WithComponents("@method", "@path"),
+)
+// error handling
+
+// Verify the request.
+result, err := verifier.Verify(httpsig.MessageFromRequest(req))
+// error handling
+```
+
+### AWS KMS
+
+The same approach works with external key management systems such as AWS KMS. The application-provided adapter handles the KMS interaction and any required cryptographic processing.
+
+For example, an ECDSA signer backed by AWS KMS could look like this:
+
+```go
+type awsMessageSigner struct {
+    client *kms.Client
+    keyID  string
+}
+
+func (s awsMessageSigner) SignMessage(ctx context.Context, message []byte) ([]byte, error) {
+    digest := sha256.Sum256(message)
+
+    response, err := s.client.Sign(ctx, &kms.SignInput{
+        KeyId:            &s.keyID,
+        Message:          digest[:],
+        MessageType:      types.MessageTypeDigest,
+        SigningAlgorithm: types.SigningAlgorithmSpecEcdsaSha256,
+    })
+    if err != nil {
+        return nil, err
+    }
+
+    // Convert the ASN.1 DER-encoded ECDSA signature returned by AWS KMS to r || s.
+    return ecdsaSignatureToRaw(response.Signature)
+}
+```
+
+The adapter can then be passed to `httpsig` like any other signing key:
+
+```go
+client := ... // create the AWS KMS client
+keyID := ...  // obtain the key ID
+
+signer, err := httpsig.NewSigner(
+    httpsig.Key{
+        Material:  awsMessageSigner{client: client, keyID: keyID},
+        Algorithm: httpsig.EcdsaP256Sha256,
+    },
+    httpsig.WithKeyID(keyID),
+    httpsig.WithComponents("@method", "@path"),
+)
+// error handling
+
+req, err := ... // create the request
+
+req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
+// error handling
+```
+
 ## Protocols and Profiles
 
 ### WIMSE Workload-to-Workload HTTP Signatures
@@ -516,4 +643,17 @@ app.Use(func(c fiber.Ctx) error {
 * **Replay:** Enforce the required nonce checks after successful signature verification.
 * **Multiple signatures:** Labels are not signed, and `VerificationResult` has no defined order. Choose the required tags or validate all signatures as appropriate.
 
-See [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#section-7).
+See also [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc9421.html#section-7).
+
+## Limitations and Compliance
+
+### RFC 9421 Compliance
+
+Following are the known limitations and deviations:
+
+- **HTTP trailers:** The `;tr` component identifier parameter is not supported. `Signature` and `Signature-Input` fields cannot be processed as trailers.
+- **Signature negotiation:** Generating `Accept-Signature` is supported, but parsing received `Accept-Signature` fields is not yet implemented.
+
+### Other Limitations
+
+- **Body streaming:** `Content-Digest` generation and verification currently require buffering the complete message body in memory. Streaming digest calculation is not yet supported.

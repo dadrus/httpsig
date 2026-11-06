@@ -103,9 +103,10 @@ const (
 )
 
 // SignatureAlgorithm identifies the concrete cryptographic algorithm used
-// to create or verify an HTTP message signature. The supported algorithms
-// are the constants below; the selected algorithm must be compatible with
-// the supplied Key.Material.
+// to create or verify an HTTP message signature. The constants below are
+// supported by the built-in implementations. Other algorithms can be used
+// with an application-provided MessageSigner or MessageVerifier. The selected
+// algorithm must be compatible with the supplied Key.Material.
 type SignatureAlgorithm string
 
 const (
@@ -239,17 +240,36 @@ func (p SignatureParameters) Tag() (string, bool) {
 // strings when validating profile-specific signature parameters.
 type Token string
 
+// MessageSigner signs the complete HTTP signature base using an
+// application-provided implementation. The implementation is responsible for
+// all cryptographic processing and must return signature bytes in the format
+// required by the selected HTTP Message Signatures algorithm.
+// Context is supplied by the message being signed.
+type MessageSigner interface {
+	SignMessage(ctx context.Context, message []byte) ([]byte, error)
+}
+
+// MessageVerifier verifies the complete HTTP signature base using an
+// application-provided implementation. The signature bytes are passed through
+// unchanged; the implementation is responsible for the algorithm and encoding.
+// Context is supplied by the message being verified.
+type MessageVerifier interface {
+	VerifyMessage(ctx context.Context, message, signature []byte) error
+}
+
 // Key combines cryptographic key material with the concrete signature
-// algorithm to use. Signing requires private or symmetric key material;
-// verification requires public or symmetric key material.
+// algorithm to use. Signing requires private or symmetric key material (or
+// a signer interface); verification requires public or symmetric key material
+// (or a verifier interface).
 type Key struct {
 	// Algorithm is the signature algorithm to use with Material.
 	// It must be compatible with the supplied key material.
 	Algorithm SignatureAlgorithm
 
 	// Material is the private, public, or symmetric key material used by the
-	// chosen algorithm. The currently supported implementations accept the
-	// corresponding Go crypto key types or []byte for HMAC.
+	// chosen algorithm. The built-in implementations accept the
+	// corresponding Go crypto key types or []byte for HMAC. Applications
+	// may also provide a MessageSigner or MessageVerifier implementation.
 	Material any
 }
 

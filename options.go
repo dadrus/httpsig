@@ -366,20 +366,40 @@ func validateNonceOption(value any) (string, error) {
 }
 
 // WithValidityTolerance specifies the allowed clock skew for created and
-// expires timestamp checks.
-func WithValidityTolerance(d time.Duration) VerifierOption {
+// expires timestamp checks. The duration must not be negative; zero allows
+// no clock skew.
+func WithValidityTolerance(tolerance time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
-		e.tolerance = d
+		if tolerance < 0 {
+			return fmt.Errorf("%w: validity tolerance must not be negative", ErrParameter)
+		}
+
+		e.tolerance = &tolerance
 
 		return nil
 	})
 }
 
 // WithMaxAge specifies the maximum allowed age of a signature with a
-// created timestamp.
-func WithMaxAge(d time.Duration) VerifierOption {
+// created timestamp. The duration must be positive.
+func WithMaxAge(age time.Duration) VerifierOption {
 	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
-		e.maxAge = d
+		if age <= 0 {
+			return fmt.Errorf("%w: max age must be positive", ErrParameter)
+		}
+
+		e.maxAge = &age
+
+		return nil
+	})
+}
+
+// WithoutMaxAge disables the maximum age check for signatures with a created
+// timestamp. Checks for future created timestamps and signature expiration
+// remain active.
+func WithoutMaxAge() VerifierOption {
+	return verifierOptionFunc(func(_ *verifier, e *verificationPolicy, _ bool) error {
+		e.maxAge = new(time.Duration)
 
 		return nil
 	})
@@ -401,10 +421,7 @@ func WithRequiredTag(tag string, opts ...VerifierOption) VerifierOption {
 			return fmt.Errorf("%w: requirements for tag %s are already configured", ErrParameter, tag)
 		}
 
-		policy := &verificationPolicy{
-			tolerance: -1,
-			maxAge:    -1,
-		}
+		policy := &verificationPolicy{}
 
 		for _, opt := range opts {
 			if err := opt.applyVerifierOption(ver, policy, true); err != nil {

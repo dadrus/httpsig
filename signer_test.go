@@ -40,25 +40,25 @@ func TestNewPayloadSigner(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(k256), n)
 
-	for _, tc := range []struct {
-		uc  string
+	for uc, tc := range map[string]struct {
 		key any
 		alg SignatureAlgorithm
 		typ any
 		err error
 	}{
-		{uc: "unsupported algorithm", key: "foo", err: ErrUnsupportedKeyType},
-		{uc: "ed25519 signer", key: ek25519, alg: Ed25519, typ: &ed25519Signer{}},
-		{uc: "rsa signer", key: pk2048, alg: RsaPssSha256, typ: &rsaSigner{}},
-		{uc: "ecdsa signer", key: pkp256, alg: EcdsaP256Sha256, typ: &ecdsaSigner{}},
-		{uc: "hmac signer", key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"unsupported key type": {key: "foo", err: ErrUnsupportedKeyType},
+		"ed25519 signer":       {key: ek25519, alg: Ed25519, typ: &ed25519Signer{}},
+		"rsa signer":           {key: pk2048, alg: RsaPssSha256, typ: &rsaSigner{}},
+		"ecdsa signer":         {key: pkp256, alg: EcdsaP256Sha256, typ: &ecdsaSigner{}},
+		"hmac signer":          {key: k256, alg: HmacSha256, typ: &symmetricSigner{}},
+		"message signer":       {key: &MessageSignerMock{}, alg: SignatureAlgorithm("custom-alg"), typ: &messageSignerAdaptor{}},
 	} {
-		t.Run(tc.uc, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			sig, err := newPayloadSigner(tc.key, tc.alg)
 
 			if tc.err != nil {
-				require.Error(t, err)
 				require.ErrorIs(t, err, tc.err)
+				assert.Nil(t, sig)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, sig)
@@ -108,6 +108,17 @@ func TestNewSigner(t *testing.T) {
 				t.Helper()
 
 				require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+			},
+		},
+		{
+			uc:   "unknown algorithm with message signer",
+			key:  Key{Algorithm: SignatureAlgorithm("custom-alg"), Material: &MessageSignerMock{}},
+			opts: []SignerOption{WithAlg()},
+			assert: func(t *testing.T, err error, s Signer) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.NotNil(t, s)
 			},
 		},
 		{
@@ -211,13 +222,6 @@ func TestNewSigner(t *testing.T) {
 }
 
 func TestSignerSign(t *testing.T) {
-	// used by RFC9421 in test vectors
-	currentTime = func() time.Time { return time.Unix(1618884473, 0) }
-
-	t.Cleanup(func() {
-		currentTime = time.Now
-	})
-
 	pkp384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
 
@@ -789,58 +793,74 @@ func TestSignerSign(t *testing.T) {
 		},
 	} {
 		t.Run(tc.uc, func(t *testing.T) {
-			s, err := NewSigner(tc.key, tc.opts...)
-			require.NoError(t, err)
+			withRFC9421Time(t, func(t *testing.T) {
+				t.Helper()
 
-			res, err := s.Sign(tc.msg, tc.signOpts...)
+				s, err := NewSigner(tc.key, tc.opts...)
+				require.NoError(t, err)
 
-			tc.assert(t, err, res)
+				res, err := s.Sign(tc.msg, tc.signOpts...)
+
+				tc.assert(t, err, res)
+			})
 		})
 	}
 
 	t.Run("per-call label does not persist", func(t *testing.T) {
-		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
-			WithTTL(0),
-			WithLabel("static"),
-		)
-		require.NoError(t, err)
+		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
 
-		first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true}, WithLabel("dynamic"))
-		require.NoError(t, err)
-		assert.Equal(t, `dynamic=();created=1618884473`, first.Get("Signature-Input"))
+			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
+				WithTTL(0),
+				WithLabel("static"),
+			)
+			require.NoError(t, err)
 
-		second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
-		require.NoError(t, err)
-		assert.Equal(t, `static=();created=1618884473`, second.Get("Signature-Input"))
+			first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true}, WithLabel("dynamic"))
+			require.NoError(t, err)
+			assert.Equal(t, `dynamic=();created=1618884473`, first.Get("Signature-Input"))
+
+			second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
+			require.NoError(t, err)
+			assert.Equal(t, `static=();created=1618884473`, second.Get("Signature-Input"))
+		})
 	})
 
 	t.Run("per-call nonce does not persist", func(t *testing.T) {
-		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")}, WithTTL(0))
-		require.NoError(t, err)
+		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
 
-		first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true},
-			WithParameter("nonce", "requested-nonce"))
-		require.NoError(t, err)
-		assert.Equal(t, `sig=();created=1618884473;nonce="requested-nonce"`, first.Get("Signature-Input"))
+			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")}, WithTTL(0))
+			require.NoError(t, err)
 
-		second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
-		require.NoError(t, err)
-		assert.Equal(t, `sig=();created=1618884473`, second.Get("Signature-Input"))
+			first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true},
+				WithParameter("nonce", "requested-nonce"))
+			require.NoError(t, err)
+			assert.Equal(t, `sig=();created=1618884473;nonce="requested-nonce"`, first.Get("Signature-Input"))
+
+			second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
+			require.NoError(t, err)
+			assert.Equal(t, `sig=();created=1618884473`, second.Get("Signature-Input"))
+		})
 	})
 
 	t.Run("per-call parameters do not persist", func(t *testing.T) {
-		s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
-			WithTTL(0),
-		)
-		require.NoError(t, err)
+		withRFC9421Time(t, func(t *testing.T) {
+			t.Helper()
 
-		first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true},
-			WithParameter("wimse-req-nonce", "request-nonce"))
-		require.NoError(t, err)
-		assert.Contains(t, first.Get("Signature-Input"), `;wimse-req-nonce="request-nonce"`)
+			s, err := NewSigner(Key{Algorithm: HmacSha256, Material: []byte("secret")},
+				WithTTL(0),
+			)
+			require.NoError(t, err)
 
-		second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
-		require.NoError(t, err)
-		assert.Equal(t, `sig=();created=1618884473`, second.Get("Signature-Input"))
+			first, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true},
+				WithParameter("wimse-req-nonce", "request-nonce"))
+			require.NoError(t, err)
+			assert.Contains(t, first.Get("Signature-Input"), `;wimse-req-nonce="request-nonce"`)
+
+			second, err := s.Sign(&Message{Header: http.Header{}, IsRequest: true})
+			require.NoError(t, err)
+			assert.Equal(t, `sig=();created=1618884473`, second.Get("Signature-Input"))
+		})
 	})
 }
