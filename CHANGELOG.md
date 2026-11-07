@@ -7,12 +7,12 @@
 
 * Cryptographic agility support ([#187](https://github.com/dadrus/httpsig/issues/187)) ([77420eb](https://github.com/dadrus/httpsig/commit/77420eb76e68e3994dadde009be3d7cb99abf33d))
 * New `WithoutMaxAge` option for signature verification ([#186](https://github.com/dadrus/httpsig/issues/186)) ([7805c90](https://github.com/dadrus/httpsig/commit/7805c90cd7ba5accdc1975fa66759a28fecff19f))
-* Supporting parsing of `Accept-Signature` header ([#176](https://github.com/dadrus/httpsig/issues/176)) ([a0fcb76](https://github.com/dadrus/httpsig/commit/a0fcb76c5a68e1218d4d0d6de3b08d011393f3a5))
+* Supporting parsing of `Accept-Signature` header ([#176](https://github.com/dadrus/httpsig/issues/176)) by [@rosylilly](https://github.com/rosylilly) ([a0fcb76](https://github.com/dadrus/httpsig/commit/a0fcb76c5a68e1218d4d0d6de3b08d011393f3a5))
 
 
 ### Bug Fixes
 
-* `"[@authority](https://github.com/authority)"` canonicalization corrected ([#196](https://github.com/dadrus/httpsig/issues/196)) ([a572b10](https://github.com/dadrus/httpsig/commit/a572b10fd2ae9c723b7dbfbe96f9fa012b7bb583))
+* `"@authority"` canonicalization corrected ([#196](https://github.com/dadrus/httpsig/issues/196)) ([a572b10](https://github.com/dadrus/httpsig/commit/a572b10fd2ae9c723b7dbfbe96f9fa012b7bb583))
 * HTTP field value canonicalization corrected ([#195](https://github.com/dadrus/httpsig/issues/195)) ([b6e9ce3](https://github.com/dadrus/httpsig/commit/b6e9ce3633afdececf1c93225a3c2201593d5880))
 * Inconsistent handling of -1 between global and tag-specific `WithMaxAge` configurations eliminated ([#185](https://github.com/dadrus/httpsig/issues/185)) ([68bfbba](https://github.com/dadrus/httpsig/commit/68bfbba3caaddbbdcea0bfe3803d8f16475fba8f))
 * More compliant component identifier validation according to RFC 9421 ([#192](https://github.com/dadrus/httpsig/issues/192)) ([8ca769e](https://github.com/dadrus/httpsig/commit/8ca769eec7cd78ffed9ba8a07f850b8f19af7f0d))
@@ -69,8 +69,8 @@
 
 ### Bug Fixes
 
-* have nonce checker make decisions on absence of nonces in signature ([#107](https://github.com/dadrus/httpsig/issues/107)) ([25f319d](https://github.com/dadrus/httpsig/commit/25f319db37f527cdc8060ebfeab09bbec949057b))
-* Minor typos in the errors for missing created and updated parameters ([#113](https://github.com/dadrus/httpsig/issues/113)) ([a1ae2ef](https://github.com/dadrus/httpsig/commit/a1ae2efcc6d09f7c19969bf03d5678aa62d596d2))
+* have nonce checker make decisions on absence of nonces in signature ([#107](https://github.com/dadrus/httpsig/issues/107)) by [@mariusor](https://github.com/mariusor) ([25f319d](https://github.com/dadrus/httpsig/commit/25f319db37f527cdc8060ebfeab09bbec949057b))
+* Minor typos in the errors for missing created and updated parameters ([#113](https://github.com/dadrus/httpsig/issues/113)) by [@mariusor](https://github.com/mariusor) ([a1ae2ef](https://github.com/dadrus/httpsig/commit/a1ae2efcc6d09f7c19969bf03d5678aa62d596d2))
 * NonceChecker adapter function fixed ([#118](https://github.com/dadrus/httpsig/issues/118)) ([aeed528](https://github.com/dadrus/httpsig/commit/aeed528a6dc7cc4f377236411ac358a956304a12))
 * Recompute `Content-Digest` header value when signing `content-digest` component ([#116](https://github.com/dadrus/httpsig/issues/116)) ([ebd49e0](https://github.com/dadrus/httpsig/commit/ebd49e07bb01a44be4dc5877c347607d6fcfa206))
 * Rejecting duplicate component identifier as required by the RFC ([#119](https://github.com/dadrus/httpsig/issues/119)) ([f7873db](https://github.com/dadrus/httpsig/commit/f7873db1d3493476e90f5dde9b9389318ddd569a))
