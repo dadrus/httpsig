@@ -4,7 +4,7 @@
 
 ## Introduction and Scope
 
-`httpsig` is a library for signing and verifying HTTP requests and responses according to [RFC 9421 (HTTP Message Signatures)](https://www.rfc-editor.org/rfc/rfc9421.html).
+`httpsig` is a library for signing and verifying HTTP requests and responses according to [RFC 9421 (HTTP Message Signatures)](https://www.rfc-editor.org/rfc/rfc9421.html). In addition to the Structured Fields types defined by [RFC 8941](https://www.rfc-editor.org/rfc/rfc8941.html?utm_source=chatgpt.com), it also supports the `Date` and `Display String` types introduced by [RFC 9651](https://www.rfc-editor.org/rfc/rfc9651.html?utm_source=chatgpt.com).
 
 Its key features include:
 
@@ -48,6 +48,12 @@ signer, err := httpsig.NewSigner(
     httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
     // a tag for your specific application
     httpsig.WithTag("myapp"),
+	// custom parameter
+	httpsig.WithParameter("first", "value 1"),
+    // custom parameter
+	httpsig.WithParameter("second", httpsig.DisplayString("öäü")),
+	// custom parameter
+	httpsig.WithParameter("third", httpsig.Date(time.Now())),
 )
 // error handling goes here
 
