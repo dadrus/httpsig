@@ -510,14 +510,9 @@ func TestCanonicalizeAuthority(t *testing.T) {
 		want        []string
 		errContains string
 	}{
-		"@authority for request - valid http without port": {
+		"@authority for request - without port": {
 			identifier: `"@authority"`,
-			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "http"}, IsRequest: true},
-			want:       []string{"example.com"},
-		},
-		"@authority for request - valid https without port": {
-			identifier: `"@authority"`,
-			message:    &Message{Authority: "example.com", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			message:    &Message{Authority: "ExAmPlE.COM", URL: &url.URL{Scheme: "http"}, IsRequest: true},
 			want:       []string{"example.com"},
 		},
 		"@authority for request - valid http with default port": {
@@ -530,15 +525,55 @@ func TestCanonicalizeAuthority(t *testing.T) {
 			message:    &Message{Authority: "example.com:443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
 			want:       []string{"example.com"},
 		},
-		"@authority for request - valid http with custom port": {
-			identifier: `"@authority"`,
-			message:    &Message{Authority: "example.com:8080", URL: &url.URL{Scheme: "http"}, IsRequest: true},
-			want:       []string{"example.com:8080"},
-		},
 		"@authority for request - valid https with custom port": {
 			identifier: `"@authority"`,
 			message:    &Message{Authority: "example.com:8443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
 			want:       []string{"example.com:8443"},
+		},
+		"@authority for request - ipv6 default port": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "[2001:DB8::1]:443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			want:       []string{"[2001:db8::1]"},
+		},
+		"@authority for request - percent-encoded letter": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXA%6Dple.COM", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			want:       []string{"example.com"},
+		},
+		"@authority for request - padded default port": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXAMPLE.com:0443", URL: &url.URL{Scheme: "HTTPS"}, IsRequest: true},
+			want:       []string{"example.com"},
+		},
+		"@authority for request - padded non-default port": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXAMPLE.com:008443", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			want:       []string{"example.com:8443"},
+		},
+		"@authority for request - empty port": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXAMPLE.com:", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			want:       []string{"example.com"},
+		},
+		"@authority for request - zero port": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "example.com:0000", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			want:       []string{"example.com:0"},
+		},
+		"@authority for request - no default-port removal for other scheme": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXAMPLE.com:443", URL: &url.URL{Scheme: "http"}, IsRequest: true},
+			want:       []string{"example.com:443"},
+		},
+		"@authority for request - no default-port removal without scheme": {
+			identifier: `"@authority"`,
+			message:    &Message{Authority: "EXAMPLE.com:80", URL: &url.URL{}, IsRequest: true},
+			want:       []string{"example.com:80"},
+		},
+		"@authority for request - invalid non-numeric port": {
+			identifier:  `"@authority"`,
+			message:     &Message{Authority: "example.com:abc", URL: &url.URL{Scheme: "https"}, IsRequest: true},
+			errContains: "invalid authority",
 		},
 		"@authority for request - invalid": {
 			identifier:  `"@authority";req`,
