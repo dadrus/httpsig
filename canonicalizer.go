@@ -2,7 +2,6 @@ package httpsig
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -150,25 +149,35 @@ func newAuthorityCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 			return nil, err
 		}
 
-		host, port, err := net.SplitHostPort(msg.Authority)
-		if err != nil {
-			// no port, just use the whole thing
-			return []string{strings.ToLower(msg.Authority)}, nil //nolint:nilerr
+		host, port, valid := splitHostPort(msg.Authority)
+		if !valid {
+			return nil, fmt.Errorf("%w: invalid authority %q", ErrCanonicalization, msg.Authority)
 		}
 
-		// default ports shall be omitted
-		switch strings.ToLower(msg.URL.Scheme) {
-		case "http":
-			if port == "80" {
-				return []string{strings.ToLower(host)}, nil
-			}
-		case "https":
-			if port == "443" {
-				return []string{strings.ToLower(host)}, nil
+		host = normalizeHost(host)
+		if port == "" {
+			return []string{host}, nil
+		}
+
+		port = strings.TrimLeft(port, "0")
+		if port == "" {
+			port = "0"
+		}
+
+		if msg.URL != nil {
+			switch strings.ToLower(msg.URL.Scheme) {
+			case "http":
+				if port == "80" {
+					return []string{host}, nil
+				}
+			case "https":
+				if port == "443" {
+					return []string{host}, nil
+				}
 			}
 		}
 
-		return []string{strings.ToLower(msg.Authority)}, nil
+		return []string{host + ":" + port}, nil
 	}), nil
 }
 
