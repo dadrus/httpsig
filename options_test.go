@@ -334,30 +334,15 @@ func TestWithAlgForSigner(t *testing.T) {
 func TestWithParameterForSigner(t *testing.T) {
 	t.Parallel()
 
-	t.Run("supported parameter types", func(t *testing.T) {
-		for uc, tc := range map[string]struct {
-			value any
-			want  any
-		}{
-			"string":        {value: "value", want: "value"},
-			"token":         {value: Token("value"), want: httpsfv.Token("value")},
-			"integer":       {value: 42, want: int64(42)},
-			"int64":         {value: int64(42), want: int64(42)},
-			"decimal":       {value: 1.5, want: 1.5},
-			"boolean":       {value: true, want: true},
-			"byte sequence": {value: []byte("value"), want: []byte("value")},
-		} {
-			t.Run(uc, func(t *testing.T) {
-				s := &signer{}
+	t.Run("extension parameter", func(t *testing.T) {
+		s := &signer{}
 
-				err := WithParameter("example", tc.value).applySignerOption(s)
+		err := WithParameter("example", "value").applySignerOption(s)
 
-				require.NoError(t, err)
-				require.Len(t, s.parameters, 1)
-				assert.Equal(t, SignatureParameter("example"), s.parameters[0].name)
-				assert.Equal(t, tc.want, s.parameters[0].value)
-			})
-		}
+		require.NoError(t, err)
+		require.Len(t, s.parameters, 1)
+		assert.Equal(t, SignatureParameter("example"), s.parameters[0].name)
+		assert.Equal(t, "value", s.parameters[0].value)
 	})
 
 	t.Run("static byte sequence is copied", func(t *testing.T) {
@@ -371,22 +356,14 @@ func TestWithParameterForSigner(t *testing.T) {
 		assert.Equal(t, []byte("before"), s.parameters[0].value)
 	})
 
-	for uc, param := range map[string]parameterOption{
-		"reserved parameter": WithParameter("created", int64(1)),
-		"static nonce":       WithParameter("nonce", "fixed"),
-		"invalid name":       WithParameter("invalid name", "value"),
-		"invalid string":     WithParameter("example", "bad\nvalue"),
-		"unsupported type":   WithParameter("example", struct{}{}),
-	} {
-		t.Run(uc, func(t *testing.T) {
-			s := &signer{}
+	t.Run("invalid parameter", func(t *testing.T) {
+		s := &signer{}
 
-			err := param.applySignerOption(s)
+		err := WithParameter("example", struct{}{}).applySignerOption(s)
 
-			require.ErrorIs(t, err, ErrParameter)
-			assert.Empty(t, s.parameters)
-		})
-	}
+		require.ErrorIs(t, err, ErrParameter)
+		assert.Empty(t, s.parameters)
+	})
 
 	t.Run("duplicate parameter", func(t *testing.T) {
 		s := &signer{}
@@ -417,19 +394,19 @@ func TestWithParameterForSign(t *testing.T) {
 	t.Run("additional parameter", func(t *testing.T) {
 		opts := &signOptions{}
 
-		err := WithParameter("extension", Token("value")).applySignOption(opts)
+		err := WithParameter("extension", "value").applySignOption(opts)
 
 		require.NoError(t, err)
 		require.Len(t, opts.parameters, 1)
 		assert.Equal(t, SignatureParameter("extension"), opts.parameters[0].name)
-		assert.Equal(t, httpsfv.Token("value"), opts.parameters[0].value)
+		assert.Equal(t, "value", opts.parameters[0].value)
 	})
 
 	for uc, param := range map[string]parameterOption{
 		"empty nonce":               WithParameter("nonce", ""),
 		"nonce with incorrect type": WithParameter("nonce", Token("value")),
 		"invalid nonce string":      WithParameter("nonce", "bad\nvalue"),
-		"reserved parameter":        WithParameter("expires", int64(1)),
+		"invalid extension":         WithParameter("extension", struct{}{}),
 	} {
 		t.Run(uc, func(t *testing.T) {
 			opts := &signOptions{}
@@ -478,28 +455,16 @@ func TestWithParameterForSign(t *testing.T) {
 func TestWithParameterForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
-	for uc, tc := range map[string]struct {
-		value any
-		want  any
-	}{
-		"string":        {value: "value", want: "value"},
-		"token":         {value: Token("value"), want: httpsfv.Token("value")},
-		"integer":       {value: 42, want: int64(42)},
-		"decimal":       {value: 1.5, want: 1.5},
-		"boolean":       {value: true, want: true},
-		"byte sequence": {value: []byte("value"), want: []byte("value")},
-	} {
-		t.Run(uc, func(t *testing.T) {
-			asb := &AcceptSignatureBuilder{}
+	t.Run("extension parameter", func(t *testing.T) {
+		asb := &AcceptSignatureBuilder{}
 
-			err := WithParameter("example", tc.value).applyAcceptSignatureOption(asb)
+		err := WithParameter("example", "value").applyAcceptSignatureOption(asb)
 
-			require.NoError(t, err)
-			require.Len(t, asb.parameters, 1)
-			assert.Equal(t, SignatureParameter("example"), asb.parameters[0].name)
-			assert.Equal(t, tc.want, asb.parameters[0].value)
-		})
-	}
+		require.NoError(t, err)
+		require.Len(t, asb.parameters, 1)
+		assert.Equal(t, SignatureParameter("example"), asb.parameters[0].name)
+		assert.Equal(t, "value", asb.parameters[0].value)
+	})
 
 	t.Run("static byte sequence is copied", func(t *testing.T) {
 		value := []byte("before")
@@ -512,22 +477,14 @@ func TestWithParameterForAcceptSignature(t *testing.T) {
 		assert.Equal(t, []byte("before"), asb.parameters[0].value)
 	})
 
-	for uc, param := range map[string]parameterOption{
-		"reserved parameter": WithParameter("created", int64(1)),
-		"static nonce":       WithParameter("nonce", "fixed"),
-		"invalid name":       WithParameter("invalid name", "value"),
-		"invalid string":     WithParameter("example", "bad\nvalue"),
-		"unsupported type":   WithParameter("example", struct{}{}),
-	} {
-		t.Run(uc, func(t *testing.T) {
-			asb := &AcceptSignatureBuilder{}
+	t.Run("invalid parameter", func(t *testing.T) {
+		asb := &AcceptSignatureBuilder{}
 
-			err := param.applyAcceptSignatureOption(asb)
+		err := WithParameter("example", struct{}{}).applyAcceptSignatureOption(asb)
 
-			require.ErrorIs(t, err, ErrParameter)
-			assert.Empty(t, asb.parameters)
-		})
-	}
+		require.ErrorIs(t, err, ErrParameter)
+		assert.Empty(t, asb.parameters)
+	})
 
 	t.Run("duplicate parameter", func(t *testing.T) {
 		asb := &AcceptSignatureBuilder{}
@@ -550,12 +507,11 @@ func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 		wantErr bool
 	}{
 		"nonce":                     {param: WithParameter("nonce", "request-nonce"), want: "request-nonce"},
-		"extension":                 {param: WithParameter("extension", Token("value")), want: httpsfv.Token("value")},
+		"extension":                 {param: WithParameter("extension", "value"), want: "value"},
 		"empty nonce":               {param: WithParameter("nonce", ""), wantErr: true},
 		"nonce with incorrect type": {param: WithParameter("nonce", Token("value")), wantErr: true},
 		"invalid nonce string":      {param: WithParameter("nonce", "bad\nvalue"), wantErr: true},
-		"reserved parameter":        {param: WithParameter("created", true), wantErr: true},
-		"invalid extension":         {param: WithParameter("extension", "bad\nvalue"), wantErr: true},
+		"invalid extension":         {param: WithParameter("extension", struct{}{}), wantErr: true},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			opts := &acceptSignatureBuildOptions{}
@@ -613,6 +569,55 @@ func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 		require.ErrorIs(t, err, ErrParameter)
 		assert.Empty(t, opts.parameters)
 	})
+}
+
+func TestNormalizeParameter(t *testing.T) {
+	t.Parallel()
+
+	date := time.Unix(1794000000, 750000000).In(time.FixedZone("UTC+2", 2*60*60))
+
+	for uc, tc := range map[string]struct {
+		option  parameterOption
+		want    any
+		invalid bool
+	}{
+		"string":                  {option: WithParameter("example", "value"), want: "value"},
+		"token":                   {option: WithParameter("example", Token("value")), want: httpsfv.Token("value")},
+		"structured fields token": {option: WithParameter("example", httpsfv.Token("value")), want: httpsfv.Token("value")},
+		"display string":          {option: WithParameter("example", DisplayString("Grüße")), want: httpsfv.DisplayString("Grüße")},
+		"empty display string":    {option: WithParameter("example", DisplayString("")), want: httpsfv.DisplayString("")},
+		"date":                    {option: WithParameter("example", date), want: time.Unix(date.Unix(), 0).UTC()},
+		"integer":                 {option: WithParameter("example", 42), want: int64(42)},
+		"int64":                   {option: WithParameter("example", int64(42)), want: int64(42)},
+		"decimal":                 {option: WithParameter("example", 1.5), want: 1.5},
+		"boolean":                 {option: WithParameter("example", true), want: true},
+		"byte sequence":           {option: WithParameter("example", []byte("value")), want: []byte("value")},
+		"reserved created":        {option: WithParameter(Created, int64(1)), invalid: true},
+		"reserved expires":        {option: WithParameter(Expires, int64(1)), invalid: true},
+		"reserved keyid":          {option: WithParameter(KeyID, "key1"), invalid: true},
+		"reserved alg":            {option: WithParameter(Alg, "algorithm"), invalid: true},
+		"reserved nonce":          {option: WithParameter(Nonce, "fixed"), invalid: true},
+		"reserved tag":            {option: WithParameter(Tag, "app"), invalid: true},
+		"invalid name":            {option: WithParameter("invalid name", "value"), invalid: true},
+		"invalid string":          {option: WithParameter("example", "bad\nvalue"), invalid: true},
+		"invalid token":           {option: WithParameter("example", Token("bad token")), invalid: true},
+		"invalid display string":  {option: WithParameter("example", DisplayString("bad\xffvalue")), invalid: true},
+		"date out of range":       {option: WithParameter("example", time.Unix(1000000000000000, 0)), invalid: true},
+		"unsupported type":        {option: WithParameter("example", struct{}{}), invalid: true},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			option, err := normalizeParameter(tc.option)
+			if tc.invalid {
+				require.ErrorIs(t, err, ErrParameter)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.option.name, option.name)
+			assert.Equal(t, tc.want, option.value)
+		})
+	}
 }
 
 func TestWithValidityTolerance(t *testing.T) {

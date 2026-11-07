@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -238,12 +239,13 @@ func WithAlg() SignerOption {
 // WithParameter specifies an extension parameter for signing, verifying, or
 // requesting a signature, either statically or for a single call. It can also
 // be used in WithSignatureNegotiation. Extension values may be
-// string, Token, bool, int, int64, float64, or []byte. Standard RFC 9421
+// string, Token, DisplayString, time.Time (RFC 9651 Date), bool, int, int64,
+// float64, or []byte. DisplayString must contain valid UTF-8, and Date values
+// are transmitted with second precision. Standard RFC 9421
 // parameter names are reserved, except for a non-empty string nonce on Verify,
 // Sign, or AcceptSignatureBuilder.Build. Verification requirements are additive;
 // an invocation cannot override static requirements. Duplicate signing or
-// builder parameters are rejected. Do not use secret expected values: verification
-// compares them before the signature has been authenticated.
+// builder parameters are rejected.
 func WithParameter(name SignatureParameter, value any) parameterOption {
 	return parameterOption{name: name, value: value}
 }
@@ -632,6 +634,15 @@ func normalizeParameter(option parameterOption) (parameterOption, error) {
 	switch v := option.value.(type) {
 	case Token:
 		option.value = httpsfv.Token(v)
+	case DisplayString:
+		if !utf8.ValidString(string(v)) {
+			return option, fmt.Errorf("%w: invalid UTF-8 in signature parameter %q", ErrParameter, option.name)
+		}
+
+		option.value = httpsfv.DisplayString(v)
+	case time.Time:
+		// RFC 9651 Date values have Unix-second precision.
+		option.value = time.Unix(v.Unix(), 0).UTC()
 	case int:
 		option.value = int64(v)
 	case string, bool, int64, float64, []byte, httpsfv.Token:
