@@ -48,12 +48,12 @@ signer, err := httpsig.NewSigner(
     httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
     // a tag for your specific application
     httpsig.WithTag("myapp"),
-	// custom parameter
-	httpsig.WithParameter("first", "value 1"),
     // custom parameter
-	httpsig.WithParameter("second", httpsig.DisplayString("öäü")),
-	// custom parameter
-	httpsig.WithParameter("third", httpsig.Date(time.Now())),
+    httpsig.WithParameter("first", "value 1"),
+    // custom parameter
+    httpsig.WithParameter("second", httpsig.DisplayString("öäü")),
+    // custom parameter
+    httpsig.WithParameter("third", httpsig.Date(time.Now())),
 )
 // error handling goes here
 
