@@ -125,10 +125,11 @@ func WithTTL(ttl time.Duration) SignerOption {
 
 // WithComponents specifies component identifiers to cover when signing,
 // require during verification, or request in Accept-Signature.
-// For `@query-param`, the `name` component parameter must contain the
-// canonical percent-encoded parameter name. For example, use
-// `"@query-param";name="x%2By"` for a query parameter named `x+y`; a literal
-// `+` in `name` is rejected.
+// Each identifier must be a serialized Structured Fields String Item, such as
+// `"@method"` or `"content-digest";req`. For `@query-param`, the `name`
+// component parameter must contain the canonical percent-encoded parameter name.
+// For example, use `"@query-param";name="x%2By"` for a query parameter named
+// `x+y`; a literal `+` in `name` is rejected.
 func WithComponents(identifiers ...string) componentsOption {
 	return componentsOption{identifiers: identifiers}
 }

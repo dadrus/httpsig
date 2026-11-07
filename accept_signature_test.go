@@ -45,7 +45,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 				WithKeyID("test"),
 				WithNonceGetter(&NonceGetterMock{}),
 				WithLabel("foo"),
-				WithComponents("@status", "content-digest;req"),
+				WithComponents(`"@status"`, `"content-digest";req`),
 				WithContentDigestAlgorithmPreferences(AlgorithmPreference{Sha512, 10}),
 				WithTag("bar"),
 				WithCreatedTimestamp(false),
@@ -86,7 +86,7 @@ func TestNewAcceptedSignature(t *testing.T) {
 		},
 		"option raises error": {
 			opts: []AcceptSignatureOption{
-				WithComponents("@foo"),
+				WithComponents(`"@foo"`),
 			},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
@@ -277,7 +277,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
-				WithComponents("@status", "x-foo-bar;req", "@method"),
+				WithComponents(`"@status"`, `"x-foo-bar";req`, `"@method"`),
 				WithLabel("foo"),
 				WithTag("bar"),
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
@@ -296,8 +296,8 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 		},
 		"Want-Content-Digest is omitted after overriding covered components": {
 			opts: []AcceptSignatureOption{
-				WithComponents("@status", "content-digest"),
-				WithComponents("@method"),
+				WithComponents(`"@status"`, `"content-digest"`),
+				WithComponents(`"@method"`),
 			},
 			assert: func(t *testing.T, err error, hdr http.Header) {
 				t.Helper()
@@ -311,7 +311,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
-				WithComponents("@status", "content-digest", "@method"),
+				WithComponents(`"@status"`, `"content-digest"`, `"@method"`),
 				WithLabel("foo"),
 				WithTag("bar"),
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),
@@ -334,7 +334,7 @@ func TestAcceptSignatureBuilderBuild(t *testing.T) {
 			opts: []AcceptSignatureOption{
 				WithSignatureAlgorithm(EcdsaP256Sha256),
 				WithKeyID("test"),
-				WithComponents("@status", "content-digest", "@method"),
+				WithComponents(`"@status"`, `"content-digest"`, `"@method"`),
 				WithLabel("foo"),
 				WithTag("bar"),
 				WithNonceGetter(NonceGetterFunc(func(_ context.Context) (string, error) { return "abc", nil })),

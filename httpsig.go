@@ -309,8 +309,10 @@ type SignatureInfo struct {
 	Message *Message
 
 	// Components maps covered component identifiers to the canonicalized
-	// values used to construct the signature base. It excludes the synthetic
-	// @signature-params component. Identifier parameters are retained in keys.
+	// values used to construct the signature base. Map keys are serialized
+	// Structured Fields String Items (e.g. `"@method"` or `"content-digest";req`),
+	// including identifier parameters. It excludes the synthetic
+	// @signature-params component.
 	Components map[string]string
 
 	// Parameters contains the transmitted, decoded signature parameters.

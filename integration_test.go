@@ -70,6 +70,10 @@ func TestSignAndVerifyParsedSignatureRequest(t *testing.T) {
 	assert.Equal(t, request.Label, verified[0].Label)
 	assert.Equal(t, DisplayString("Grüße"), verified[0].Parameters["nickname"])
 	assert.Equal(t, time.Unix(1794000000, 0), verified[0].Parameters["reviewed"])
+
+	for _, identifier := range request.Components {
+		assert.Contains(t, verified[0].Components, identifier)
+	}
 }
 
 func TestParseAcceptSignatureBuilderOutput(t *testing.T) {
@@ -79,7 +83,7 @@ func TestParseAcceptSignatureBuilderOutput(t *testing.T) {
 		WithLabel("bar"),
 		WithKeyID("foo"),
 		WithSignatureAlgorithm(EcdsaP256Sha256),
-		WithComponents("@status", "content-digest;req", `@query-param;name="Pet"`),
+		WithComponents(`"@status"`, `"content-digest";req`, `"@query-param";name="Pet"`),
 		WithTag("awesome-app"),
 		WithParameter("audience", "service-a"),
 		WithParameter("nickname", DisplayString("Grüße")),

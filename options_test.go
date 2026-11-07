@@ -3,7 +3,6 @@ package httpsig
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -98,8 +97,9 @@ func TestWithComponentsForSigner(t *testing.T) {
 		identifiers []string
 		err         error
 	}{
-		"multiple valid identifier": {identifiers: []string{"@method;req", "@status"}},
-		"invalid identifier":        {identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
+		"multiple valid identifier": {identifiers: []string{`"@method";req`, `"@status"`}},
+		"unquoted identifier":       {identifiers: []string{"@method"}, err: ErrInvalidComponentIdentifier},
+		"invalid identifier":        {identifiers: []string{`"@foo"`}, err: ErrUnsupportedComponentIdentifier},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			s := &signer{}
@@ -114,8 +114,9 @@ func TestWithComponentsForSigner(t *testing.T) {
 				require.Len(t, s.ids, len(tc.identifiers))
 
 				for i, id := range s.ids {
-					vals := strings.Split(tc.identifiers[i], ";")
-					assert.Equal(t, vals[0], id.Value)
+					actual, marshalErr := httpsfv.Marshal(id.Item)
+					require.NoError(t, marshalErr)
+					assert.Equal(t, tc.identifiers[i], actual)
 				}
 			}
 		})
@@ -129,8 +130,8 @@ func TestWithComponentsForVerifier(t *testing.T) {
 		identifiers []string
 		err         error
 	}{
-		"multiple valid identifier": {identifiers: []string{"@method;req", "@status"}},
-		"invalid identifier":        {identifiers: []string{"@foo"}, err: ErrUnsupportedComponentIdentifier},
+		"multiple valid identifier": {identifiers: []string{`"@method";req`, `"@status"`}},
+		"invalid identifier":        {identifiers: []string{`"@foo"`}, err: ErrUnsupportedComponentIdentifier},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			v := &verifier{}
@@ -147,8 +148,9 @@ func TestWithComponentsForVerifier(t *testing.T) {
 				require.Len(t, exp.identifiers, len(tc.identifiers))
 
 				for i, id := range exp.identifiers {
-					vals := strings.Split(tc.identifiers[i], ";")
-					assert.Equal(t, vals[0], id.Value)
+					actual, marshalErr := httpsfv.Marshal(id.Item)
+					require.NoError(t, marshalErr)
+					assert.Equal(t, tc.identifiers[i], actual)
 				}
 			}
 		})
@@ -172,7 +174,7 @@ func TestWithComponentsForAcceptSignature(t *testing.T) {
 			},
 		},
 		"invalid identifiers provided": {
-			identifiers: []string{"@foo"},
+			identifiers: []string{`"@foo"`},
 			assert: func(t *testing.T, err error, _ *AcceptSignatureBuilder) {
 				t.Helper()
 
@@ -181,7 +183,7 @@ func TestWithComponentsForAcceptSignature(t *testing.T) {
 			},
 		},
 		"valid identifiers without content-digest": {
-			identifiers: []string{"@status", "x-foo-bar"},
+			identifiers: []string{`"@status"`, `"x-foo-bar"`},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
 
@@ -193,7 +195,7 @@ func TestWithComponentsForAcceptSignature(t *testing.T) {
 			},
 		},
 		"valid identifiers with content-digest": {
-			identifiers: []string{"@status", "content-digest", "x-foo-bar"},
+			identifiers: []string{`"@status"`, `"content-digest"`, `"x-foo-bar"`},
 			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
 				t.Helper()
 
@@ -811,7 +813,7 @@ func TestWithRequiredTag(t *testing.T) {
 		},
 		"with identifiers only": {
 			opts: []VerifierOption{
-				WithComponents("@status"),
+				WithComponents(`"@status"`),
 			},
 			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()
@@ -839,7 +841,7 @@ func TestWithRequiredTag(t *testing.T) {
 		},
 		"with all possible options": {
 			opts: []VerifierOption{
-				WithComponents("@status"),
+				WithComponents(`"@status"`),
 				WithValidityTolerance(5 * time.Minute),
 			},
 			assert: func(t *testing.T, err error, exp *verificationPolicy) {
@@ -855,7 +857,7 @@ func TestWithRequiredTag(t *testing.T) {
 		},
 		"with unsupported identifier": {
 			opts: []VerifierOption{
-				WithComponents("@foo"),
+				WithComponents(`"@foo"`),
 			},
 			assert: func(t *testing.T, err error, exp *verificationPolicy) {
 				t.Helper()

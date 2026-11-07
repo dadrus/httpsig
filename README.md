@@ -18,16 +18,6 @@ For API details and option semantics, see the [Go reference](https://pkg.go.dev/
 
 ## Usage
 
-> [!NOTE]
-> Component identifiers are represented as [Structured Fields Items](https://www.rfc-editor.org/rfc/rfc9421.html#section-2.5), with quoted component names (for example, `"@method"` or `"content-digest";req`). For convenience, configuration options such as `WithComponents` also accept a simplified form that omits the quotes around the component name. Both forms are equivalent:
->
-> ```go
-> httpsig.WithComponents(`"@method"`, `"content-digest";req`) // Structured Fields form
-> httpsig.WithComponents("@method", "content-digest;req")     // simplified form
-> ```
->
-> When parsing an `Accept-Signature` header, `httpsig` returns the serialized Structured Fields form in `SignatureRequest.Components`. These values can be passed directly to `WithComponents`.
-
 ### Standalone Signing and Verification
 
 The following snippets show two independent flows: signing an outgoing request and verifying a received response. They assume application-provided keys and other values; routine error handling is abbreviated.
@@ -45,7 +35,7 @@ signer, err := httpsig.NewSigner(
     // duration for which the signature should be valid
     httpsig.WithTTL(5 * time.Second),
     // which components should be protected by a signature 
-    httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
+    httpsig.WithComponents(`"@authority"`, `"@method"`, `"x-my-fancy-header"`),
     // a tag for your specific application
     httpsig.WithTag("myapp"),
     // custom parameter
@@ -90,7 +80,7 @@ verifier, err := httpsig.NewVerifier(
     keyResolver,
     // specify the required options
     // which response components are expected to be protected
-    httpsig.WithComponents("@status", "content-type"),
+    httpsig.WithComponents(`"@status"`, `"content-type"`),
     // validity time skew
     httpsig.WithValidityTolerance(5 * time.Second),
     // how old a signature is allowed to be
@@ -122,7 +112,7 @@ verifier, err := httpsig.NewVerifier(
         // tag of the signature
         "myapp",
         // which components are expected to be protected by a signature
-        httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
+        httpsig.WithComponents(`"@authority"`, `"@method"`, `"x-my-fancy-header"`),
         // validity time skew
         httpsig.WithValidityTolerance(5 * time.Second),
         // how old a signature is allowed to be
@@ -204,7 +194,7 @@ builder, err := httpsig.NewAcceptSignature(
     // request the label and covered components
     httpsig.WithLabel("bar"),
     // specify which components should be covered by the signature 
-    httpsig.WithComponents("@status", "content-digest;req", "content-digest"),
+    httpsig.WithComponents(`"@status"`, `"content-digest";req`, `"content-digest"`),
     // specify your content digest algorithm references 
     httpsig.WithContentDigestAlgorithmPreferences(httpsig.AlgorithmPreference{Algorithm: httpsig.Sha256, Preference: 2}),
     // specify which tag the server should use 
@@ -288,7 +278,7 @@ verifier, err := httpsig.NewVerifier(
         // tag of the signature
         "myapp",
         // which components are expected to be protected by a signature
-        httpsig.WithComponents("@authority", "@method", "x-my-fancy-header"),
+        httpsig.WithComponents(`"@authority"`, `"@method"`, `"x-my-fancy-header"`),
         // validity time skew
         httpsig.WithValidityTolerance(5 * time.Second),
         // how old a signature is allowed to be
@@ -370,7 +360,7 @@ signer, err := httpsig.NewSigner(
     },
     httpsig.WithKeyID("demo-ml-dsa-44"),
     httpsig.WithAlg(),
-    httpsig.WithComponents("@method", "@path"),
+    httpsig.WithComponents(`"@method"`, `"@path"`),
 )
 // error handling
 
@@ -387,7 +377,7 @@ verifier, err := httpsig.NewVerifier(
         Algorithm: "ml-dsa-44",
     },
     httpsig.WithValidateAllSignatures(),
-    httpsig.WithComponents("@method", "@path"),
+    httpsig.WithComponents(`"@method"`, `"@path"`),
 )
 // error handling
 
@@ -438,7 +428,7 @@ signer, err := httpsig.NewSigner(
         Algorithm: httpsig.EcdsaP256Sha256,
     },
     httpsig.WithKeyID(keyID),
-    httpsig.WithComponents("@method", "@path"),
+    httpsig.WithComponents(`"@method"`, `"@path"`),
 )
 // error handling
 
@@ -459,7 +449,7 @@ The [WIMSE HTTP Signatures draft](https://datatracker.ietf.org/doc/html/draft-ie
 signer, err := httpsig.NewSigner(
     httpsig.Key{Material: privateKey, Algorithm: httpsig.Ed25519},
     httpsig.WithTag("wimse-workload-to-workload"),
-    httpsig.WithComponents("@method", "@path", "@query", "workload-identity-token"),
+    httpsig.WithComponents(`"@method"`, `"@path"`, `"@query"`, `"workload-identity-token"`),
 )
 
 req.Header, err = signer.Sign(httpsig.MessageFromRequest(req),
@@ -470,7 +460,7 @@ req.Header, err = signer.Sign(httpsig.MessageFromRequest(req),
 // Recipient
 verifier, err := httpsig.NewVerifier(witKeyResolver,
     httpsig.WithRequiredTag("wimse-workload-to-workload",
-        httpsig.WithComponents("@method", "@path", "@query", "workload-identity-token"),
+        httpsig.WithComponents(`"@method"`, `"@path"`, `"@query"`, `"workload-identity-token"`),
         httpsig.WithRequiredParameters(httpsig.Nonce),
         httpsig.WithForbiddenParameters(httpsig.KeyID, httpsig.Alg),
         httpsig.WithParameter("wimse-aud", expectedAudience),
@@ -494,7 +484,7 @@ signer, err := httpsig.NewSigner(
     httpsig.WithLabel("sig1"),
     httpsig.WithTag("web-bot-auth"),
     httpsig.WithKeyID(jwkThumbprint),
-    httpsig.WithComponents("@authority", `signature-agent;key="sig1"`),
+    httpsig.WithComponents(`"@authority"`, `"signature-agent";key="sig1"`),
 )
 
 req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
@@ -502,7 +492,7 @@ req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
 // Recipient: resolve the covered Signature-Agent member dynamically.
 verifier, err := httpsig.NewVerifier(webBotKeyResolver,
     httpsig.WithRequiredTag("web-bot-auth",
-        httpsig.WithComponents("@authority", `signature-agent;key="sig1"`),
+        httpsig.WithComponents(`"@authority"`, `"signature-agent";key="sig1"`),
         httpsig.WithRequiredParameters(httpsig.KeyID),
     ),
 )
@@ -523,14 +513,14 @@ signer, err := httpsig.NewSigner(
     httpsig.Key{Material: privateKey, Algorithm: httpsig.Ed25519},
     httpsig.WithLabel("sig"),
     httpsig.WithTTL(0),
-    httpsig.WithComponents("@method", "@authority", "@path", "signature-key"),
+    httpsig.WithComponents(`"@method"`, `"@authority"`, `"@path"`, `"signature-key"`),
 )
 req.Header, err = signer.Sign(httpsig.MessageFromRequest(req))
 
 // Resource server
 verifier, err := httpsig.NewVerifier(aauthKeyResolver,
     httpsig.WithValidateAllSignatures(),
-    httpsig.WithComponents("@method", "@authority", "@path", "signature-key"),
+    httpsig.WithComponents(`"@method"`, `"@authority"`, `"@path"`, `"signature-key"`),
     httpsig.WithExpiresTimestamp(false),
     httpsig.WithMaxAge(time.Minute),
 )
@@ -549,7 +539,7 @@ signer, err := httpsig.NewSigner(
     httpsig.Key{Material: privateKey, Algorithm: httpsig.Ed25519},
     httpsig.WithTag("httpsig-oauth"),
     httpsig.WithTTL(0),
-    httpsig.WithComponents("@method", "@target-uri", "authorization"),
+    httpsig.WithComponents(`"@method"`, `"@target-uri"`, `"authorization"`),
 )
 
 req.Header, err = signer.Sign(httpsig.MessageFromRequest(req),
@@ -559,7 +549,7 @@ req.Header, err = signer.Sign(httpsig.MessageFromRequest(req),
 // Resource server
 verifier, err := httpsig.NewVerifier(tokenBoundKeyResolver,
     httpsig.WithRequiredTag("httpsig-oauth",
-        httpsig.WithComponents("@method", "@target-uri", "authorization"),
+        httpsig.WithComponents(`"@method"`, `"@target-uri"`, `"authorization"`),
         httpsig.WithExpiresTimestamp(false),
         httpsig.WithRequiredParameters(httpsig.Nonce),
         httpsig.WithForbiddenParameters(httpsig.KeyID, httpsig.Alg, "pub"),

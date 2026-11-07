@@ -27,7 +27,7 @@ This file provides repository-specific guidance for AI coding agents working on 
 - Validate before lossy conversion: preserve parameter presence, types, and values until the relevant checks are complete.
 - Preserve protocol-level type distinctions across parsing, serialization, public APIs, and comparisons. When changing supported types, test round trips and assess compatibility implications.
 - Review untrusted-input paths for possible panics, including unchecked type assertions, nil dereferences, and dependency behavior. Malformed protocol input should produce controlled errors.
-- Respect the API contracts for Structured Fields component identifiers and any supported simplified configuration syntax.
+- Public component identifier strings in configuration and results use serialized Structured Fields String Items.
 - Never relax signature, component, timestamp, nonce, algorithm, or key validation merely to satisfy tests. Assess security and compatibility implications explicitly.
 
 ## Test design

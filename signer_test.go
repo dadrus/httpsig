@@ -92,7 +92,7 @@ func TestNewSigner(t *testing.T) {
 		{
 			uc:   "error while applying configuration options",
 			key:  Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
-			opts: []SignerOption{WithComponents("@test")},
+			opts: []SignerOption{WithComponents(`"@test"`)},
 			assert: func(t *testing.T, err error, _ Signer) {
 				t.Helper()
 
@@ -191,7 +191,7 @@ func TestNewSigner(t *testing.T) {
 			uc:  "successful with configuration",
 			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
-				WithComponents("@status"),
+				WithComponents(`"@status"`),
 				WithTag("foo"),
 				WithTTL(1 * time.Second),
 				WithLabel("bar"),
@@ -287,7 +287,7 @@ func TestSignerSign(t *testing.T) {
 			uc:  "failed updating message (adding content-digest)",
 			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
-				WithComponents("content-digest"),
+				WithComponents(`"content-digest"`),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -314,7 +314,7 @@ func TestSignerSign(t *testing.T) {
 			uc:  "failed creating signature base",
 			key: Key{Algorithm: EcdsaP384Sha384, Material: pkp384},
 			opts: []SignerOption{
-				WithComponents("@status"),
+				WithComponents(`"@status"`),
 			},
 			msg: &Message{
 				Method:    http.MethodPost,
@@ -523,7 +523,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-b22"),
 				WithTTL(0),
-				WithComponents("@authority", "content-digest", "@query-param;name=\"Pet\""),
+				WithComponents(`"@authority"`, `"content-digest"`, `"@query-param";name="Pet"`),
 				WithTag("header-example"),
 				WithContentDigestAlgorithm(Sha512),
 				WithKeyID("test-key-rsa-pss"),
@@ -565,7 +565,7 @@ func TestSignerSign(t *testing.T) {
 				WithLabel("sig-b23"),
 				WithTTL(0),
 				WithComponents(
-					"date", "@method", "@path", "@query", "@authority", "content-type", "content-digest", "content-length",
+					`"date"`, `"@method"`, `"@path"`, `"@query"`, `"@authority"`, `"content-type"`, `"content-digest"`, `"content-length"`,
 				),
 				WithContentDigestAlgorithm(Sha512),
 				WithKeyID("test-key-rsa-pss"),
@@ -606,7 +606,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-b24"),
 				WithTTL(0),
-				WithComponents("@status", "content-type", "content-digest", "content-length"),
+				WithComponents(`"@status"`, `"content-type"`, `"content-digest"`, `"content-length"`),
 				WithContentDigestAlgorithm(Sha512),
 				WithKeyID("test-key-ecc-p256"),
 			},
@@ -644,7 +644,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-b25"),
 				WithTTL(0),
-				WithComponents("date", "@authority", "content-type"),
+				WithComponents(`"date"`, `"@authority"`, `"content-type"`),
 				WithKeyID("test-shared-secret"),
 			},
 			msg: &Message{
@@ -679,7 +679,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-b26"),
 				WithTTL(0),
-				WithComponents("date", "@method", "@path", "@authority", "content-type", "content-length"),
+				WithComponents(`"date"`, `"@method"`, `"@path"`, `"@authority"`, `"content-type"`, `"content-length"`),
 				WithKeyID("test-key-ed25519"),
 			},
 			msg: &Message{
@@ -713,7 +713,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-content-digest"),
 				WithTTL(0),
-				WithComponents("content-digest"),
+				WithComponents(`"content-digest"`),
 				WithContentDigestAlgorithm(Sha256),
 				WithKeyID("test-key-rsa-pss"),
 			},
@@ -757,7 +757,7 @@ func TestSignerSign(t *testing.T) {
 			opts: []SignerOption{
 				WithLabel("sig-no-content-digest"),
 				WithTTL(0),
-				WithComponents("date", "@method"),
+				WithComponents(`"date"`, `"@method"`),
 				WithContentDigestAlgorithm(Sha256),
 				WithKeyID("test-key-rsa-pss"),
 			},

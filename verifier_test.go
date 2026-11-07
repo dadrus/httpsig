@@ -101,7 +101,7 @@ func TestNewVerifier(t *testing.T) {
 		"with component identifiers configuration error": {
 			resolver: &KeyResolverMock{},
 			opts: []VerifierOption{
-				WithComponents("@foo"),
+				WithComponents(`"@foo"`),
 			},
 			assert: func(t *testing.T, err error, _ *verifier) {
 				t.Helper()
@@ -171,7 +171,7 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test",
 					WithValidityTolerance(1*time.Second),
-					WithComponents("@status"),
+					WithComponents(`"@status"`),
 				),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -196,7 +196,7 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test"),
 				WithValidityTolerance(1 * time.Second),
-				WithComponents("@status"),
+				WithComponents(`"@status"`),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
 				t.Helper()
@@ -221,7 +221,7 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test"),
 				WithValidityTolerance(1 * time.Second),
-				WithComponents("@status", "content-digest"),
+				WithComponents(`"@status"`, `"content-digest"`),
 				WithSignatureNegotiation(
 					WithSignatureAlgorithm(RsaPssSha512),
 					WithKeyID("bar"),
@@ -261,10 +261,10 @@ func TestNewVerifier(t *testing.T) {
 			opts: []VerifierOption{
 				WithRequiredTag("test",
 					WithValidityTolerance(1*time.Second),
-					WithComponents("@status"),
+					WithComponents(`"@status"`),
 				),
 				WithValidityTolerance(1 * time.Minute),
-				WithComponents("@method"),
+				WithComponents(`"@method"`),
 				WithValidateAllSignatures(),
 			},
 			assert: func(t *testing.T, err error, v *verifier) {
@@ -703,7 +703,7 @@ func TestVerifierVerify(t *testing.T) {
 		"missing required component rejected before key resolution": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithComponents("@method"),
+					WithComponents(`"@method"`),
 				),
 				WithCreatedTimestamp(false),
 				WithExpiresTimestamp(false),
@@ -1084,7 +1084,7 @@ func TestVerifierVerify(t *testing.T) {
 		"signature parameters negotiation for not present tagged signature": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithComponents("@method", "content-digest"),
+					WithComponents(`"@method"`, `"content-digest"`),
 					WithSignatureNegotiation(
 						WithSignatureAlgorithm(RsaPssSha512),
 						WithKeyID("test-key"),
@@ -1115,10 +1115,10 @@ func TestVerifierVerify(t *testing.T) {
 		},
 		"global content-digest requirement overridden for negotiated tag": {
 			opts: []VerifierOption{
-				WithComponents("content-digest"),
+				WithComponents(`"content-digest"`),
 				WithSignatureNegotiation(),
 				WithRequiredTag("foo",
-					WithComponents("@method"),
+					WithComponents(`"@method"`),
 				),
 			},
 			msg:               &Message{Header: http.Header{}},
@@ -1141,7 +1141,7 @@ func TestVerifierVerify(t *testing.T) {
 		"signature negotiation without nonce getter omits nonce": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithComponents("@method"),
+					WithComponents(`"@method"`),
 					WithSignatureNegotiation(
 						WithLabel("foo-sig"),
 					),
@@ -1207,7 +1207,7 @@ func TestVerifierVerify(t *testing.T) {
 		"signature parameters negotiation fails because of nonce error": {
 			opts: []VerifierOption{
 				WithRequiredTag("foo",
-					WithComponents("@method"),
+					WithComponents(`"@method"`),
 					WithSignatureNegotiation(
 						WithSignatureAlgorithm(RsaPssSha512),
 						WithKeyID("test-key"),
@@ -1356,8 +1356,8 @@ func TestVerifierVerify(t *testing.T) {
 							si.Message != nil &&
 							si.Message.Header.Get("Content-Length") == "18" &&
 							len(si.Components) == 3 &&
-							si.Components["@authority"] == "example.com" &&
-							si.Components["@query-param;name=\"Pet\""] == "dog" &&
+							si.Components[`"@authority"`] == "example.com" &&
+							si.Components[`"@query-param";name="Pet"`] == "dog" &&
 							si.Parameters["created"] == int64(1618884473) &&
 							si.Parameters["keyid"] == "test-key-rsa-pss" &&
 							si.Parameters["tag"] == "header-example"
@@ -1381,8 +1381,8 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "sig-b22", sig.Label)
 
 				assert.Len(t, sig.Components, 3)
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "dog", sig.Components["@query-param;name=\"Pet\""])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "dog", sig.Components[`"@query-param";name="Pet"`])
 
 				assert.Len(t, sig.Parameters, 3)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1426,14 +1426,14 @@ func TestVerifierVerify(t *testing.T) {
 							si.Message != nil &&
 							si.Message.Header.Get("Content-Length") == "18" &&
 							len(si.Components) == 8 &&
-							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
-							si.Components["@method"] == "POST" &&
-							si.Components["@path"] == "/foo" &&
-							si.Components["@query"] == "?param=Value&Pet=dog" &&
-							si.Components["@authority"] == "example.com" &&
-							si.Components["content-type"] == "application/json" &&
-							si.Components["content-digest"] == "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:" &&
-							si.Components["content-length"] == "18" &&
+							si.Components[`"date"`] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components[`"@method"`] == "POST" &&
+							si.Components[`"@path"`] == "/foo" &&
+							si.Components[`"@query"`] == "?param=Value&Pet=dog" &&
+							si.Components[`"@authority"`] == "example.com" &&
+							si.Components[`"content-type"`] == "application/json" &&
+							si.Components[`"content-digest"`] == "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:" &&
+							si.Components[`"content-length"`] == "18" &&
 							si.Parameters["created"] == int64(1618884473) &&
 							si.Parameters["keyid"] == "test-key-rsa-pss"
 					})).
@@ -1455,14 +1455,14 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "sig-b23", sig.Label)
 
 				assert.Len(t, sig.Components, 8)
-				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
-				assert.Equal(t, "POST", sig.Components["@method"])
-				assert.Equal(t, "/foo", sig.Components["@path"])
-				assert.Equal(t, "?param=Value&Pet=dog", sig.Components["@query"])
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
-				assert.Equal(t, "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:", sig.Components["content-digest"])
-				assert.Equal(t, "18", sig.Components["content-length"])
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components[`"date"`])
+				assert.Equal(t, "POST", sig.Components[`"@method"`])
+				assert.Equal(t, "/foo", sig.Components[`"@path"`])
+				assert.Equal(t, "?param=Value&Pet=dog", sig.Components[`"@query"`])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
+				assert.Equal(t, "sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:", sig.Components[`"content-digest"`])
+				assert.Equal(t, "18", sig.Components[`"content-length"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1502,10 +1502,10 @@ func TestVerifierVerify(t *testing.T) {
 						return si.Label == "sig-b24" &&
 							si.Message != nil &&
 							len(si.Components) == 4 &&
-							si.Components["@status"] == "200" &&
-							si.Components["content-type"] == "application/json" &&
-							si.Components["content-digest"] == "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:" &&
-							si.Components["content-length"] == "23" &&
+							si.Components[`"@status"`] == "200" &&
+							si.Components[`"content-type"`] == "application/json" &&
+							si.Components[`"content-digest"`] == "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:" &&
+							si.Components[`"content-length"`] == "23" &&
 							si.Parameters["created"] == int64(1618884473) &&
 							si.Parameters["keyid"] == "test-key-ecc-p256"
 					})).
@@ -1528,10 +1528,10 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "sig-b24", sig.Label)
 
 				assert.Len(t, sig.Components, 4)
-				assert.Equal(t, "200", sig.Components["@status"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
-				assert.Equal(t, "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:", sig.Components["content-digest"])
-				assert.Equal(t, "23", sig.Components["content-length"])
+				assert.Equal(t, "200", sig.Components[`"@status"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
+				assert.Equal(t, "sha-512=:mEWXIS7MaLRuGgxOBdODa3xqM1XdEvxoYhvlCFJ41QJgJc4GTsPp29l5oGX69wWdXymyU0rjJuahq4l5aGgfLQ==:", sig.Components[`"content-digest"`])
+				assert.Equal(t, "23", sig.Components[`"content-length"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1570,9 +1570,9 @@ func TestVerifierVerify(t *testing.T) {
 						return si.Label == "sig-b25" &&
 							si.Message != nil &&
 							len(si.Components) == 3 &&
-							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
-							si.Components["@authority"] == "example.com" &&
-							si.Components["content-type"] == "application/json" &&
+							si.Components[`"date"`] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components[`"@authority"`] == "example.com" &&
+							si.Components[`"content-type"`] == "application/json" &&
 							si.Parameters["created"] == int64(1618884473) &&
 							si.Parameters["keyid"] == "test-shared-secret"
 					})).
@@ -1594,9 +1594,9 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "sig-b25", sig.Label)
 
 				assert.Len(t, sig.Components, 3)
-				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components[`"date"`])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1636,12 +1636,12 @@ func TestVerifierVerify(t *testing.T) {
 						return si.Label == "sig-b26" &&
 							si.Message != nil &&
 							len(si.Components) == 6 &&
-							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
-							si.Components["@method"] == "POST" &&
-							si.Components["@path"] == "/foo" &&
-							si.Components["@authority"] == "example.com" &&
-							si.Components["content-type"] == "application/json" &&
-							si.Components["content-length"] == "18" &&
+							si.Components[`"date"`] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components[`"@method"`] == "POST" &&
+							si.Components[`"@path"`] == "/foo" &&
+							si.Components[`"@authority"`] == "example.com" &&
+							si.Components[`"content-type"`] == "application/json" &&
+							si.Components[`"content-length"`] == "18" &&
 							si.Parameters["created"] == int64(1618884473) &&
 							si.Parameters["keyid"] == "test-key-ed25519"
 					})).
@@ -1663,12 +1663,12 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "sig-b26", sig.Label)
 
 				assert.Len(t, sig.Components, 6)
-				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
-				assert.Equal(t, "POST", sig.Components["@method"])
-				assert.Equal(t, "/foo", sig.Components["@path"])
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
-				assert.Equal(t, "18", sig.Components["content-length"])
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components[`"date"`])
+				assert.Equal(t, "POST", sig.Components[`"@method"`])
+				assert.Equal(t, "/foo", sig.Components[`"@path"`])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
+				assert.Equal(t, "18", sig.Components[`"content-length"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1822,9 +1822,9 @@ func TestVerifierVerify(t *testing.T) {
 					mock.MatchedBy(func(si SignatureInfo) bool {
 						return si.Label == "first" &&
 							si.Parameters["keyid"] == "test-shared-secret" &&
-							si.Components["date"] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
-							si.Components["@authority"] == "example.com" &&
-							si.Components["content-type"] == "application/json"
+							si.Components[`"date"`] == "Tue, 20 Apr 2021 02:07:55 GMT" &&
+							si.Components[`"@authority"`] == "example.com" &&
+							si.Components[`"content-type"`] == "application/json"
 					})).
 					Return(KeyInfo{
 						Key:      Key{Material: tkMAC, Algorithm: HmacSha256},
@@ -1836,9 +1836,9 @@ func TestVerifierVerify(t *testing.T) {
 					mock.MatchedBy(func(si SignatureInfo) bool {
 						return si.Label == "second" &&
 							si.Parameters["keyid"] == "test-key-ed25519" &&
-							si.Components["@method"] == "POST" &&
-							si.Components["@path"] == "/foo" &&
-							si.Components["@authority"] == "example.com"
+							si.Components[`"@method"`] == "POST" &&
+							si.Components[`"@path"`] == "/foo" &&
+							si.Components[`"@authority"`] == "example.com"
 					})).
 					Return(KeyInfo{
 						Key:      Key{Material: tkEd25519, Algorithm: Ed25519},
@@ -1861,9 +1861,9 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "first", sig.Label)
 
 				assert.Len(t, sig.Components, 3)
-				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components[`"date"`])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1880,12 +1880,12 @@ func TestVerifierVerify(t *testing.T) {
 				assert.Equal(t, "second", sig.Label)
 
 				assert.Len(t, sig.Components, 6)
-				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components["date"])
-				assert.Equal(t, "POST", sig.Components["@method"])
-				assert.Equal(t, "/foo", sig.Components["@path"])
-				assert.Equal(t, "example.com", sig.Components["@authority"])
-				assert.Equal(t, "application/json", sig.Components["content-type"])
-				assert.Equal(t, "18", sig.Components["content-length"])
+				assert.Equal(t, "Tue, 20 Apr 2021 02:07:55 GMT", sig.Components[`"date"`])
+				assert.Equal(t, "POST", sig.Components[`"@method"`])
+				assert.Equal(t, "/foo", sig.Components[`"@path"`])
+				assert.Equal(t, "example.com", sig.Components[`"@authority"`])
+				assert.Equal(t, "application/json", sig.Components[`"content-type"`])
+				assert.Equal(t, "18", sig.Components[`"content-length"`])
 
 				assert.Len(t, sig.Parameters, 2)
 				assert.Equal(t, int64(1618884473), sig.Parameters["created"])
@@ -1976,7 +1976,7 @@ func TestVerifierVerify(t *testing.T) {
 		inputBytes := []byte("data")
 		signer, err := NewSigner(key,
 			WithTag("profile"),
-			WithComponents("@method"),
+			WithComponents(`"@method"`),
 			WithParameter("audience", "service-a"),
 			WithParameter("score", 1.2349),
 			WithParameter("mode", Token("example")),
@@ -1998,7 +1998,7 @@ func TestVerifierVerify(t *testing.T) {
 
 		ver, err := NewVerifier(key,
 			WithRequiredTag("profile",
-				WithComponents("@method"),
+				WithComponents(`"@method"`),
 				WithRequiredParameters("nonce"),
 				WithForbiddenParameters("keyid", "alg"),
 				WithParameter("score", 1.2349),

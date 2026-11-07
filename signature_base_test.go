@@ -45,7 +45,7 @@ func TestNewSignatureBase(t *testing.T) {
 	}{
 		"successful signature base creation": {
 			components: []string{
-				"@method", "@authority", "@path", "content-digest", "content-length", "content-type",
+				`"@method"`, `"@authority"`, `"@path"`, `"content-digest"`, `"content-length"`, `"content-type"`,
 			},
 			assert: func(t *testing.T, err error, base signatureBase) {
 				t.Helper()
@@ -67,7 +67,7 @@ func TestNewSignatureBase(t *testing.T) {
 		},
 		"failing for duplicate component identifier": {
 			components: []string{
-				"@method", "@method",
+				`"@method"`, `"@method"`,
 			},
 			assert: func(t *testing.T, err error, _ signatureBase) {
 				t.Helper()
@@ -79,8 +79,8 @@ func TestNewSignatureBase(t *testing.T) {
 		},
 		"failing for duplicate parameterized component identifier": {
 			components: []string{
-				`@query-param;name="Pet"`,
-				`@query-param;name="Pet"`,
+				`"@query-param";name="Pet"`,
+				`"@query-param";name="Pet"`,
 			},
 			assert: func(t *testing.T, err error, _ signatureBase) {
 				t.Helper()
@@ -92,8 +92,8 @@ func TestNewSignatureBase(t *testing.T) {
 		},
 		"failing for duplicate component identifier with reordered parameters": {
 			components: []string{
-				`content-digest;key="sha-512";sf`,
-				`content-digest;sf;key="sha-512"`,
+				`"content-digest";key="sha-512";sf`,
+				`"content-digest";sf;key="sha-512"`,
 			},
 			assert: func(t *testing.T, err error, _ signatureBase) {
 				t.Helper()
@@ -103,7 +103,7 @@ func TestNewSignatureBase(t *testing.T) {
 			},
 		},
 		"failing for unknown component identifier": {
-			components: []string{"@status"},
+			components: []string{`"@status"`},
 			assert: func(t *testing.T, err error, _ signatureBase) {
 				t.Helper()
 
@@ -114,8 +114,8 @@ func TestNewSignatureBase(t *testing.T) {
 		},
 		"allowing same component identifier with different parameters": {
 			components: []string{
-				`@query-param;name="Pet"`,
-				`@query-param;name="Cat"`,
+				`"@query-param";name="Pet"`,
+				`"@query-param";name="Cat"`,
 			},
 			assert: func(t *testing.T, err error, base signatureBase) {
 				t.Helper()
@@ -154,11 +154,11 @@ func TestNewSignatureBaseWithPreparedIdentifiers(t *testing.T) {
 
 	for name, identifiers := range map[string][]string{
 		"no covered components":        {},
-		"simple component":             {"@method"},
-		"several components":           {"@method", "@authority", "x-example"},
-		"parameterized components":     {"@method", `@query-param;name="Pet"`, `@query-param;name="Cat"`},
-		"duplicate component":          {"@method", "@method"},
-		"duplicate parameterized item": {`@query-param;name="Pet"`, `@query-param;name="Pet"`},
+		"simple component":             {`"@method"`},
+		"several components":           {`"@method"`, `"@authority"`, `"x-example"`},
+		"parameterized components":     {`"@method"`, `"@query-param";name="Pet"`, `"@query-param";name="Cat"`},
+		"duplicate component":          {`"@method"`, `"@method"`},
+		"duplicate parameterized item": {`"@query-param";name="Pet"`, `"@query-param";name="Pet"`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -206,7 +206,7 @@ func TestNewSignatureBaseWithPreparedIdentifiers(t *testing.T) {
 func TestNewSignatureBaseWithInvalidPreparedIdentifierCount(t *testing.T) {
 	t.Parallel()
 
-	ids, err := toComponentIdentifiers([]string{"@method"})
+	ids, err := toComponentIdentifiers([]string{`"@method"`})
 	require.NoError(t, err)
 
 	input := newSignatureInput(ids, httpsfv.NewParams())
@@ -263,7 +263,6 @@ func TestSignatureBaseComponents(t *testing.T) {
 	t.Parallel()
 
 	for uc, tc := range map[string]struct {
-		names           []string
 		entries         []serializedComponent
 		signatureParams string
 		expected        map[string]string
@@ -276,7 +275,6 @@ func TestSignatureBaseComponents(t *testing.T) {
 			expected:        map[string]string{},
 		},
 		"simple component identifiers": {
-			names: []string{"@method", "@authority", "user-agent"},
 			entries: []serializedComponent{
 				{identifier: `"@method"`, value: "GET"},
 				{identifier: `"@authority"`, value: "example.com"},
@@ -284,62 +282,52 @@ func TestSignatureBaseComponents(t *testing.T) {
 			},
 			signatureParams: `("@method" "@authority" "user-agent")`,
 			expected: map[string]string{
-				"@method":    "GET",
-				"@authority": "example.com",
-				"user-agent": "ExampleBot/1.0",
+				`"@method"`:    "GET",
+				`"@authority"`: "example.com",
+				`"user-agent"`: "ExampleBot/1.0",
 			},
 		},
 		"parameterized component identifiers": {
-			names: []string{"@query-param", "@query-param", "signature-agent"},
 			entries: []serializedComponent{
 				{identifier: `"@query-param";name="Pet"`, value: "dog"},
 				{identifier: `"@query-param";name="Cat"`, value: "meow"},
 				{identifier: `"signature-agent";key="sig1"`, value: `"https://bots.example.com";type=cimd`},
 			},
 			expected: map[string]string{
-				`@query-param;name="Pet"`:    "dog",
-				`@query-param;name="Cat"`:    "meow",
-				`signature-agent;key="sig1"`: `"https://bots.example.com";type=cimd`,
+				`"@query-param";name="Pet"`:    "dog",
+				`"@query-param";name="Cat"`:    "meow",
+				`"signature-agent";key="sig1"`: `"https://bots.example.com";type=cimd`,
 			},
 		},
 		"boolean identifier parameter": {
-			names: []string{"content-type"},
 			entries: []serializedComponent{
 				{identifier: `"content-type";sf`, value: "application/json"},
 			},
 			expected: map[string]string{
-				"content-type;sf": "application/json",
+				`"content-type";sf`: "application/json",
 			},
 		},
 		"multiple canonicalized values": {
-			names: []string{"x-example"},
 			entries: []serializedComponent{
 				{identifier: `"x-example"`, value: "first, second, third"},
 			},
 			expected: map[string]string{
-				"x-example": "first, second, third",
+				`"x-example"`: "first, second, third",
 			},
 		},
 		"empty canonicalized value": {
-			names: []string{"x-empty"},
 			entries: []serializedComponent{
 				{identifier: `"x-empty"`, value: ""},
 			},
 			expected: map[string]string{
-				"x-empty": "",
+				`"x-empty"`: "",
 			},
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			t.Parallel()
 
-			identifiers := make([]*componentIdentifier, len(tc.names))
-			for i, name := range tc.names {
-				identifiers[i] = &componentIdentifier{Item: httpsfv.NewItem(name)}
-			}
-
 			base := signatureBase{
-				input:           &signatureInput{identifiers: identifiers},
 				entries:         tc.entries,
 				signatureParams: tc.signatureParams,
 			}
