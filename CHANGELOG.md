@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/dadrus/httpsig/compare/v0.11.0...v0.11.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* `[@query-param](https://github.com/query-param)` canonicalization corrected according to RFC 9421. ([#198](https://github.com/dadrus/httpsig/issues/198)) ([ed3e595](https://github.com/dadrus/httpsig/commit/ed3e5950a163bc4b6569617d2dc4bf471420b6e3))
+* Parsing dictionary fields directly for key components ([#200](https://github.com/dadrus/httpsig/issues/200)) ([8c7ee2d](https://github.com/dadrus/httpsig/commit/8c7ee2d536821357ad4239a51e4828c6939d2cd5))
+
 ## [0.11.0](https://github.com/dadrus/httpsig/compare/v0.10.0...v0.11.0) (2026-11-07)
 
 
