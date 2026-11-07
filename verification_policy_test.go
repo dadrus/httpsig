@@ -31,6 +31,52 @@ func TestVerificationPolicyClone(t *testing.T) {
 	assert.Equal(t, []parameterOption{{name: "audience", value: "service-a"}}, original.expectedParameters)
 }
 
+func TestAreEqual(t *testing.T) {
+	t.Parallel()
+
+	date := time.Unix(1794000000, 0)
+	for name, tc := range map[string]struct {
+		a, b  any
+		equal bool
+	}{
+		"equal strings":             {a: "hello", b: "hello", equal: true},
+		"different strings":         {a: "hello", b: "world"},
+		"equal tokens":              {a: httpsfv.Token("test"), b: httpsfv.Token("test"), equal: true},
+		"equal display strings":     {a: httpsfv.DisplayString("Grüße"), b: httpsfv.DisplayString("Grüße"), equal: true},
+		"different string types":    {a: "hello", b: httpsfv.DisplayString("hello")},
+		"string and token differ":   {a: "hello", b: httpsfv.Token("hello")},
+		"string and bytes differ":   {a: "hello", b: []byte("hello")},
+		"equal booleans":            {a: true, b: true, equal: true},
+		"equal integers":            {a: int64(123), b: int64(123), equal: true},
+		"equal decimals":            {a: 1.234, b: 1.234, equal: true},
+		"equal byte sequences":      {a: []byte("abc"), b: []byte("abc"), equal: true},
+		"different byte sequences":  {a: []byte("abc"), b: []byte("abd")},
+		"empty byte sequences":      {a: []byte(nil), b: []byte{}, equal: true},
+		"same date with other zone": {a: date.UTC(), b: date.In(time.FixedZone("UTC+2", 2*60*60)).Add(500 * time.Millisecond), equal: true},
+		"different date seconds":    {a: date, b: date.Add(time.Second)},
+		"date is not an integer":    {a: date, b: date.Unix()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.equal, areEqual(tc.a, tc.b))
+		})
+	}
+}
+
+func TestVerificationPolicyExpectParameter(t *testing.T) {
+	t.Parallel()
+
+	date := time.Unix(1794000000, 0)
+	policy := &verificationPolicy{}
+	require.NoError(t, policy.expectParameter(parameterOption{name: "reviewed", value: date.UTC()}))
+	require.NoError(t, policy.expectParameter(parameterOption{
+		name: "reviewed", value: date.In(time.FixedZone("UTC+2", 2*60*60)),
+	}))
+	require.Len(t, policy.expectedParameters, 1)
+	require.ErrorIs(t, policy.expectParameter(parameterOption{
+		name: "reviewed", value: date.Add(time.Second),
+	}), ErrParameter)
+}
+
 func TestVerificationPolicyWithOptions(t *testing.T) {
 	t.Parallel()
 
@@ -443,6 +489,51 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, ErrMissingParameter)
 				require.ErrorContains(t, err, `expires parameter`)
+			},
+		},
+		"date parameter matches across time zones": {
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add("reviewed", time.Unix(1794000000, 0))
+
+					return params
+				}(),
+			},
+			exp: verificationPolicy{
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				expectedParameters: []parameterOption{{
+					name: "reviewed", value: time.Unix(1794000000, 500000000).UTC(),
+				}},
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+			},
+		},
+		"date parameter does not match an integer": {
+			params: httpsfv.InnerList{
+				Params: func() *httpsfv.Params {
+					params := httpsfv.NewParams()
+					params.Add("reviewed", int64(1794000000))
+
+					return params
+				}(),
+			},
+			exp: verificationPolicy{
+				reqCreatedTS: &falseVal,
+				reqExpiresTS: &falseVal,
+				expectedParameters: []parameterOption{{
+					name: "reviewed", value: time.Unix(1794000000, 0),
+				}},
+			},
+			assert: func(t *testing.T, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, `unexpected value for signature parameter "reviewed"`)
 			},
 		},
 		"successful assertion with all possible parameters": {

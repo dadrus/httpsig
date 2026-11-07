@@ -3,7 +3,6 @@ package httpsig
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -221,7 +220,7 @@ func (e *verificationPolicy) expectParameter(option parameterOption) error {
 
 	for _, existing := range e.expectedParameters {
 		if existing.name == option.name {
-			if reflect.DeepEqual(existing.value, option.value) {
+			if areEqual(existing.value, option.value) {
 				return nil
 			}
 
@@ -315,7 +314,7 @@ func (e *verificationPolicy) assertMetadata(si *signatureInput, msg *Message) er
 			return fmt.Errorf("%w: expected signature parameter %q is missing", ErrMissingParameter, param.name)
 		}
 
-		if !reflect.DeepEqual(value, param.value) {
+		if !areEqual(value, param.value) {
 			return fmt.Errorf("%w: unexpected value for signature parameter %q", ErrParameter, param.name)
 		}
 	}
@@ -345,4 +344,21 @@ func (e *verificationPolicy) assertKeyAlgorithm(si *signatureInput, keyAlg Signa
 	}
 
 	return nil
+}
+
+func areEqual(expected, actual any) bool {
+	switch value := expected.(type) {
+	case string, httpsfv.Token, httpsfv.DisplayString, bool, int64, float64:
+		return expected == actual
+	case []byte:
+		other, ok := actual.([]byte)
+
+		return ok && bytes.Equal(value, other)
+	case time.Time:
+		other, ok := actual.(time.Time)
+
+		return ok && value.Unix() == other.Unix()
+	default:
+		return false
+	}
 }
