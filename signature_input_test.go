@@ -371,7 +371,8 @@ func TestDecodeParameter(t *testing.T) {
 		want  any
 	}{
 		"token":          {value: httpsfv.Token("foo"), want: Token("foo")},
-		"display string": {value: httpsfv.DisplayString("café"), want: "café"},
+		"display string": {value: httpsfv.DisplayString("café"), want: DisplayString("café")},
+		"date":           {value: time.Unix(1794000000, 0), want: time.Unix(1794000000, 0)},
 		"string":         {value: "foo", want: "foo"},
 		"integer":        {value: int64(42), want: int64(42)},
 		"byte sequence":  {value: []byte{1, 2, 3}, want: []byte{1, 2, 3}},

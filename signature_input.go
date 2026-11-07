@@ -61,7 +61,7 @@ func decodeParameter(value any) any {
 	case httpsfv.Token:
 		return Token(v)
 	case httpsfv.DisplayString:
-		return string(v)
+		return DisplayString(v)
 	default:
 		return value
 	}
