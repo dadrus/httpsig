@@ -334,241 +334,345 @@ func TestWithAlgForSigner(t *testing.T) {
 func TestWithParameterForSigner(t *testing.T) {
 	t.Parallel()
 
-	t.Run("extension parameter", func(t *testing.T) {
-		s := &signer{}
+	value := []byte("before")
 
-		err := WithParameter("example", "value").applySignerOption(s)
+	for uc, tc := range map[string]struct {
+		option   parameterOption
+		previous []parameterOption
+		assert   func(t *testing.T, err error, s *signer)
+	}{
+		"extension parameter": {
+			option: WithParameter("example", "value"),
+			assert: func(t *testing.T, err error, s *signer) {
+				t.Helper()
 
-		require.NoError(t, err)
-		require.Len(t, s.parameters, 1)
-		assert.Equal(t, SignatureParameter("example"), s.parameters[0].name)
-		assert.Equal(t, "value", s.parameters[0].value)
-	})
+				require.NoError(t, err)
+				require.Len(t, s.parameters, 1)
+				assert.Equal(t, SignatureParameter("example"), s.parameters[0].name)
+				assert.Equal(t, "value", s.parameters[0].value)
+			},
+		},
+		"static byte sequence is copied": {
+			option: WithParameter("example", value),
+			assert: func(t *testing.T, err error, s *signer) {
+				t.Helper()
 
-	t.Run("static byte sequence is copied", func(t *testing.T) {
-		value := []byte("before")
-		s := &signer{}
+				require.NoError(t, err)
+				require.Len(t, s.parameters, 1)
 
-		err := WithParameter("example", value).applySignerOption(s)
-		require.NoError(t, err)
+				value[0] = 'X'
+				assert.Equal(t, []byte("before"), s.parameters[0].value)
+			},
+		},
+		"invalid parameter": {
+			option: WithParameter("example", struct{}{}),
+			assert: func(t *testing.T, err error, s *signer) {
+				t.Helper()
 
-		value[0] = 'X'
-		assert.Equal(t, []byte("before"), s.parameters[0].value)
-	})
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, s.parameters)
+			},
+		},
+		"duplicate parameter": {
+			option:   WithParameter("example", "second"),
+			previous: []parameterOption{WithParameter("example", "first")},
+			assert: func(t *testing.T, err error, s *signer) {
+				t.Helper()
 
-	t.Run("invalid parameter", func(t *testing.T) {
-		s := &signer{}
+				require.ErrorIs(t, err, ErrParameter)
+				require.Len(t, s.parameters, 1)
+				assert.Equal(t, "first", s.parameters[0].value)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			s := &signer{}
+			for _, previous := range tc.previous {
+				require.NoError(t, previous.applySignerOption(s))
+			}
 
-		err := WithParameter("example", struct{}{}).applySignerOption(s)
-
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Empty(t, s.parameters)
-	})
-
-	t.Run("duplicate parameter", func(t *testing.T) {
-		s := &signer{}
-		require.NoError(t, WithParameter("example", "first").applySignerOption(s))
-
-		err := WithParameter("example", "second").applySignerOption(s)
-
-		require.ErrorIs(t, err, ErrParameter)
-		require.Len(t, s.parameters, 1)
-		assert.Equal(t, "first", s.parameters[0].value)
-	})
+			err := tc.option.applySignerOption(s)
+			tc.assert(t, err, s)
+		})
+	}
 }
 
 func TestWithParameterForSign(t *testing.T) {
 	t.Parallel()
 
-	t.Run("per-call nonce", func(t *testing.T) {
-		opts := &signOptions{}
+	for uc, tc := range map[string]struct {
+		option           parameterOption
+		previous         []parameterOption
+		staticParameters []parameterOption
+		assert           func(t *testing.T, err error, opts *signOptions)
+	}{
+		"per-call nonce": {
+			option: WithParameter("nonce", "request-nonce"),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-		err := WithParameter("nonce", "request-nonce").applySignOption(opts)
+				require.NoError(t, err)
+				assert.True(t, opts.nonceSet)
+				assert.Equal(t, "request-nonce", opts.nonce)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+		"additional parameter": {
+			option: WithParameter("extension", "value"),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-		require.NoError(t, err)
-		assert.True(t, opts.nonceSet)
-		assert.Equal(t, "request-nonce", opts.nonce)
-		assert.Empty(t, opts.parameters)
-	})
+				require.NoError(t, err)
+				require.Len(t, opts.parameters, 1)
+				assert.Equal(t, SignatureParameter("extension"), opts.parameters[0].name)
+				assert.Equal(t, "value", opts.parameters[0].value)
+			},
+		},
+		"empty nonce": {
+			option: WithParameter("nonce", ""),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-	t.Run("additional parameter", func(t *testing.T) {
-		opts := &signOptions{}
+				require.ErrorIs(t, err, ErrParameter)
+				assert.False(t, opts.nonceSet)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+		"nonce with incorrect type": {
+			option: WithParameter("nonce", Token("value")),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-		err := WithParameter("extension", "value").applySignOption(opts)
+				require.ErrorIs(t, err, ErrParameter)
+				assert.False(t, opts.nonceSet)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+		"invalid nonce string": {
+			option: WithParameter("nonce", "bad\nvalue"),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-		require.NoError(t, err)
-		require.Len(t, opts.parameters, 1)
-		assert.Equal(t, SignatureParameter("extension"), opts.parameters[0].name)
-		assert.Equal(t, "value", opts.parameters[0].value)
-	})
+				require.ErrorIs(t, err, ErrParameter)
+				assert.False(t, opts.nonceSet)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+		"invalid extension": {
+			option: WithParameter("extension", struct{}{}),
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
 
-	for uc, param := range map[string]parameterOption{
-		"empty nonce":               WithParameter("nonce", ""),
-		"nonce with incorrect type": WithParameter("nonce", Token("value")),
-		"invalid nonce string":      WithParameter("nonce", "bad\nvalue"),
-		"invalid extension":         WithParameter("extension", struct{}{}),
+				require.ErrorIs(t, err, ErrParameter)
+				assert.False(t, opts.nonceSet)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+		"duplicate nonce": {
+			option:   WithParameter("nonce", "second"),
+			previous: []parameterOption{WithParameter("nonce", "first")},
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Equal(t, "first", opts.nonce)
+			},
+		},
+		"duplicate additional parameter": {
+			option:   WithParameter("extension", "second"),
+			previous: []parameterOption{WithParameter("extension", "first")},
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				require.Len(t, opts.parameters, 1)
+				assert.Equal(t, "first", opts.parameters[0].value)
+			},
+		},
+		"collision with a static parameter": {
+			option:           WithParameter("extension", "per-call"),
+			staticParameters: []parameterOption{{name: "extension", value: "static"}},
+			assert: func(t *testing.T, err error, opts *signOptions) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, opts.parameters)
+			},
+		},
 	} {
 		t.Run(uc, func(t *testing.T) {
-			opts := &signOptions{}
+			opts := &signOptions{staticParameters: tc.staticParameters}
+			for _, previous := range tc.previous {
+				require.NoError(t, previous.applySignOption(opts))
+			}
 
-			err := param.applySignOption(opts)
-
-			require.ErrorIs(t, err, ErrParameter)
-			assert.False(t, opts.nonceSet)
-			assert.Empty(t, opts.parameters)
+			err := tc.option.applySignOption(opts)
+			tc.assert(t, err, opts)
 		})
 	}
-
-	t.Run("duplicate nonce", func(t *testing.T) {
-		opts := &signOptions{}
-		require.NoError(t, WithParameter("nonce", "first").applySignOption(opts))
-
-		err := WithParameter("nonce", "second").applySignOption(opts)
-
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Equal(t, "first", opts.nonce)
-	})
-
-	t.Run("duplicate additional parameter", func(t *testing.T) {
-		opts := &signOptions{}
-		require.NoError(t, WithParameter("extension", "first").applySignOption(opts))
-
-		err := WithParameter("extension", "second").applySignOption(opts)
-
-		require.ErrorIs(t, err, ErrParameter)
-		require.Len(t, opts.parameters, 1)
-		assert.Equal(t, "first", opts.parameters[0].value)
-	})
-
-	t.Run("collision with a static parameter", func(t *testing.T) {
-		opts := &signOptions{
-			staticParameters: []parameterOption{{name: "extension", value: "static"}},
-		}
-
-		err := WithParameter("extension", "per-call").applySignOption(opts)
-
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Empty(t, opts.parameters)
-	})
 }
 
 func TestWithParameterForAcceptSignature(t *testing.T) {
 	t.Parallel()
 
-	t.Run("extension parameter", func(t *testing.T) {
-		asb := &AcceptSignatureBuilder{}
+	value := []byte("before")
 
-		err := WithParameter("example", "value").applyAcceptSignatureOption(asb)
+	for uc, tc := range map[string]struct {
+		option   parameterOption
+		previous []parameterOption
+		assert   func(t *testing.T, err error, asb *AcceptSignatureBuilder)
+	}{
+		"extension parameter": {
+			option: WithParameter("example", "value"),
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
 
-		require.NoError(t, err)
-		require.Len(t, asb.parameters, 1)
-		assert.Equal(t, SignatureParameter("example"), asb.parameters[0].name)
-		assert.Equal(t, "value", asb.parameters[0].value)
-	})
+				require.NoError(t, err)
+				require.Len(t, asb.parameters, 1)
+				assert.Equal(t, SignatureParameter("example"), asb.parameters[0].name)
+				assert.Equal(t, "value", asb.parameters[0].value)
+			},
+		},
+		"static byte sequence is copied": {
+			option: WithParameter("example", value),
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
 
-	t.Run("static byte sequence is copied", func(t *testing.T) {
-		value := []byte("before")
-		asb := &AcceptSignatureBuilder{}
+				require.NoError(t, err)
+				require.Len(t, asb.parameters, 1)
 
-		err := WithParameter("example", value).applyAcceptSignatureOption(asb)
-		require.NoError(t, err)
+				value[0] = 'X'
+				assert.Equal(t, []byte("before"), asb.parameters[0].value)
+			},
+		},
+		"invalid parameter": {
+			option: WithParameter("example", struct{}{}),
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
 
-		value[0] = 'X'
-		assert.Equal(t, []byte("before"), asb.parameters[0].value)
-	})
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, asb.parameters)
+			},
+		},
+		"duplicate parameter": {
+			option:   WithParameter("example", "second"),
+			previous: []parameterOption{WithParameter("example", "first")},
+			assert: func(t *testing.T, err error, asb *AcceptSignatureBuilder) {
+				t.Helper()
 
-	t.Run("invalid parameter", func(t *testing.T) {
-		asb := &AcceptSignatureBuilder{}
+				require.ErrorIs(t, err, ErrParameter)
+				require.Len(t, asb.parameters, 1)
+				assert.Equal(t, "first", asb.parameters[0].value)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			asb := &AcceptSignatureBuilder{}
+			for _, previous := range tc.previous {
+				require.NoError(t, previous.applyAcceptSignatureOption(asb))
+			}
 
-		err := WithParameter("example", struct{}{}).applyAcceptSignatureOption(asb)
-
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Empty(t, asb.parameters)
-	})
-
-	t.Run("duplicate parameter", func(t *testing.T) {
-		asb := &AcceptSignatureBuilder{}
-		require.NoError(t, WithParameter("example", "first").applyAcceptSignatureOption(asb))
-
-		err := WithParameter("example", "second").applyAcceptSignatureOption(asb)
-
-		require.ErrorIs(t, err, ErrParameter)
-		require.Len(t, asb.parameters, 1)
-		assert.Equal(t, "first", asb.parameters[0].value)
-	})
+			err := tc.option.applyAcceptSignatureOption(asb)
+			tc.assert(t, err, asb)
+		})
+	}
 }
 
 func TestWithParameterForAcceptSignatureBuild(t *testing.T) {
 	t.Parallel()
 
-	for uc, tc := range map[string]struct {
-		param   parameterOption
-		want    any
-		wantErr bool
-	}{
-		"nonce":                     {param: WithParameter("nonce", "request-nonce"), want: "request-nonce"},
-		"extension":                 {param: WithParameter("extension", "value"), want: "value"},
-		"empty nonce":               {param: WithParameter("nonce", ""), wantErr: true},
-		"nonce with incorrect type": {param: WithParameter("nonce", Token("value")), wantErr: true},
-		"invalid nonce string":      {param: WithParameter("nonce", "bad\nvalue"), wantErr: true},
-		"invalid extension":         {param: WithParameter("extension", struct{}{}), wantErr: true},
-	} {
-		t.Run(uc, func(t *testing.T) {
-			opts := &acceptSignatureBuildOptions{}
+	assertInvalid := func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+		t.Helper()
 
-			err := tc.param.applyAcceptSignatureBuildOption(opts)
-
-			if tc.wantErr {
-				require.ErrorIs(t, err, ErrParameter)
-				assert.False(t, opts.nonceSet)
-				assert.Empty(t, opts.parameters)
-
-				return
-			}
-
-			require.NoError(t, err)
-
-			if tc.param.name == "nonce" {
-				assert.True(t, opts.nonceSet)
-				assert.Equal(t, tc.want, opts.nonce)
-			} else {
-				require.Len(t, opts.parameters, 1)
-				assert.Equal(t, tc.want, opts.parameters[0].value)
-			}
-		})
+		require.ErrorIs(t, err, ErrParameter)
+		assert.False(t, opts.nonceSet)
+		assert.Empty(t, opts.parameters)
 	}
 
-	t.Run("duplicate nonce", func(t *testing.T) {
-		opts := &acceptSignatureBuildOptions{}
-		require.NoError(t, WithParameter("nonce", "first").applyAcceptSignatureBuildOption(opts))
+	for uc, tc := range map[string]struct {
+		option           parameterOption
+		previous         []parameterOption
+		staticParameters []parameterOption
+		assert           func(t *testing.T, err error, opts *acceptSignatureBuildOptions)
+	}{
+		"nonce": {
+			option: WithParameter("nonce", "request-nonce"),
+			assert: func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+				t.Helper()
 
-		err := WithParameter("nonce", "second").applyAcceptSignatureBuildOption(opts)
+				require.NoError(t, err)
+				assert.True(t, opts.nonceSet)
+				assert.Equal(t, "request-nonce", opts.nonce)
+			},
+		},
+		"extension": {
+			option: WithParameter("extension", "value"),
+			assert: func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+				t.Helper()
 
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Equal(t, "first", opts.nonce)
-	})
+				require.NoError(t, err)
+				require.Len(t, opts.parameters, 1)
+				assert.Equal(t, "value", opts.parameters[0].value)
+			},
+		},
+		"empty nonce": {
+			option: WithParameter("nonce", ""),
+			assert: assertInvalid,
+		},
+		"nonce with incorrect type": {
+			option: WithParameter("nonce", Token("value")),
+			assert: assertInvalid,
+		},
+		"invalid nonce string": {
+			option: WithParameter("nonce", "bad\nvalue"),
+			assert: assertInvalid,
+		},
+		"invalid extension": {
+			option: WithParameter("extension", struct{}{}),
+			assert: assertInvalid,
+		},
+		"duplicate nonce": {
+			option:   WithParameter("nonce", "second"),
+			previous: []parameterOption{WithParameter("nonce", "first")},
+			assert: func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+				t.Helper()
 
-	t.Run("duplicate extension", func(t *testing.T) {
-		opts := &acceptSignatureBuildOptions{}
-		require.NoError(t, WithParameter("extension", "first").applyAcceptSignatureBuildOption(opts))
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Equal(t, "first", opts.nonce)
+			},
+		},
+		"duplicate extension": {
+			option:   WithParameter("extension", "second"),
+			previous: []parameterOption{WithParameter("extension", "first")},
+			assert: func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+				t.Helper()
 
-		err := WithParameter("extension", "second").applyAcceptSignatureBuildOption(opts)
-
-		require.ErrorIs(t, err, ErrParameter)
-		require.Len(t, opts.parameters, 1)
-		assert.Equal(t, "first", opts.parameters[0].value)
-	})
-
-	t.Run("extension conflicts with static parameter", func(t *testing.T) {
-		opts := &acceptSignatureBuildOptions{
+				require.ErrorIs(t, err, ErrParameter)
+				require.Len(t, opts.parameters, 1)
+				assert.Equal(t, "first", opts.parameters[0].value)
+			},
+		},
+		"extension conflicts with static parameter": {
+			option:           WithParameter("extension", "per-call"),
 			staticParameters: []parameterOption{{name: "extension", value: "static"}},
-		}
+			assert: func(t *testing.T, err error, opts *acceptSignatureBuildOptions) {
+				t.Helper()
 
-		err := WithParameter("extension", "per-call").applyAcceptSignatureBuildOption(opts)
+				require.ErrorIs(t, err, ErrParameter)
+				assert.Empty(t, opts.parameters)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			opts := &acceptSignatureBuildOptions{staticParameters: tc.staticParameters}
+			for _, previous := range tc.previous {
+				require.NoError(t, previous.applyAcceptSignatureBuildOption(opts))
+			}
 
-		require.ErrorIs(t, err, ErrParameter)
-		assert.Empty(t, opts.parameters)
-	})
+			err := tc.option.applyAcceptSignatureBuildOption(opts)
+			tc.assert(t, err, opts)
+		})
+	}
 }
 
 func TestNormalizeParameter(t *testing.T) {
