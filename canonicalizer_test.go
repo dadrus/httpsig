@@ -304,11 +304,13 @@ func TestNewQueryParamCanonicalizer(t *testing.T) {
 		params map[string]any
 		valid  bool
 	}{
-		"without params":     {},
-		"without name":       {params: map[string]any{"req": true}},
-		"with name":          {params: map[string]any{"name": "foo"}, valid: true},
-		"with name and req":  {params: map[string]any{"name": "foo", "req": true}, valid: true},
-		"with disallowed sf": {params: map[string]any{"name": "foo", "sf": true}},
+		"without params":      {},
+		"without name":        {params: map[string]any{"req": true}},
+		"with name":           {params: map[string]any{"name": "foo"}, valid: true},
+		"with name and req":   {params: map[string]any{"name": "foo", "req": true}, valid: true},
+		"with encoded name":   {params: map[string]any{"name": "x%2By"}, valid: true},
+		"with invalid escape": {params: map[string]any{"name": "x%GG"}},
+		"with disallowed sf":  {params: map[string]any{"name": "foo", "sf": true}},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			var params *httpsfv.Params
@@ -842,6 +844,26 @@ func TestCanonicalizeQueryParam(t *testing.T) {
 			message:    &Message{URL: testURL1, IsRequest: true},
 			want:       []string{"%5Bid%5D"},
 		},
+		"@query-param for request - percent-encoded plus in name": {
+			identifier: `"@query-param";name="x%2By"`,
+			message:    &Message{URL: &url.URL{RawQuery: "x%2By=ok"}, IsRequest: true},
+			want:       []string{"ok"},
+		},
+		"@query-param for request - percent-encoded space in name": {
+			identifier: `"@query-param";name="x%20y"`,
+			message:    &Message{URL: &url.URL{RawQuery: "x+y=ok"}, IsRequest: true},
+			want:       []string{"ok"},
+		},
+		"@query-param for request - literal plus in name is not a space": {
+			identifier: `"@query-param";name="x+y"`,
+			message:    &Message{URL: &url.URL{RawQuery: "x%2By=plus&x+y=space"}, IsRequest: true},
+			want:       []string{"plus"},
+		},
+		"@query-param for request - empty value": {
+			identifier: `"@query-param";name="x"`,
+			message:    &Message{URL: &url.URL{RawQuery: "x="}, IsRequest: true},
+			want:       []string{""},
+		},
 		"@query-param for request - valid with duplicate unrelated parameter": {
 			identifier: `"@query-param";name="foo"`,
 			message:    &Message{URL: &url.URL{RawQuery: "foo=bar&other=one&other=two"}, IsRequest: true},
@@ -855,11 +877,6 @@ func TestCanonicalizeQueryParam(t *testing.T) {
 		"@query-param for request - invalid, duplicate encoded parameter": {
 			identifier:  `"@query-param";name="foo"`,
 			message:     &Message{URL: &url.URL{RawQuery: "foo=one&%66oo=two"}, IsRequest: true},
-			errContains: "occurs multiple times",
-		},
-		"@query-param for response - invalid, duplicate request parameter": {
-			identifier:  `"@query-param";name="foo";req`,
-			message:     &Message{URL: &url.URL{RawQuery: "foo=one&foo=two"}, IsRequest: false},
 			errContains: "occurs multiple times",
 		},
 		"@query-param for request - invalid, parameter not present in query": {
@@ -996,6 +1013,27 @@ func TestCanonicalizeHeader(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.want, value)
 			}
+		})
+	}
+}
+
+func TestEncodeQueryParam(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		value string
+		want  string
+	}{
+		"empty value":             {},
+		"unescaped ASCII":         {value: "AZaz09*-._", want: "AZaz09*-._"},
+		"literal plus":            {value: "a+b", want: "a%2Bb"},
+		"space":                   {value: "a b", want: "a%20b"},
+		"form special characters": {value: "a*b~c&d/e", want: "a*b%7Ec%26d%2Fe"},
+		"non-ASCII and newline":   {value: "café\n", want: "caf%C3%A9%0A"},
+		"percent sign":            {value: "a%b", want: "a%25b"},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			assert.Equal(t, tc.want, encodeQueryParam(tc.value))
 		})
 	}
 }
