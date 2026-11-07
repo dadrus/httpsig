@@ -101,9 +101,9 @@ func TestVerificationPolicyWithOptions(t *testing.T) {
 func TestVerificationPolicyInherit(t *testing.T) {
 	t.Parallel()
 
-	globalIDs, err := toComponentIdentifiers([]string{"@method", "content-digest"})
+	globalIDs, err := toComponentIdentifiers([]string{`"@method"`, `"content-digest"`})
 	require.NoError(t, err)
-	localIDs, err := toComponentIdentifiers([]string{"@status"})
+	localIDs, err := toComponentIdentifiers([]string{`"@status"`})
 	require.NoError(t, err)
 
 	localBuilder := &AcceptSignatureBuilder{label: "custom"}
@@ -441,7 +441,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				}},
 			},
 			exp: func() verificationPolicy {
-				ids, err := toComponentIdentifiers([]string{`@query-param;name="foo"`})
+				ids, err := toComponentIdentifiers([]string{`"@query-param";name="foo"`})
 				require.NoError(t, err)
 
 				return verificationPolicy{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
@@ -456,7 +456,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 		"expected component identifier missing": {
 			params: httpsfv.InnerList{Params: httpsfv.NewParams()},
 			exp: func() verificationPolicy {
-				ids, err := toComponentIdentifiers([]string{"@method;req", "@authority"})
+				ids, err := toComponentIdentifiers([]string{`"@method";req`, `"@authority"`})
 				require.NoError(t, err)
 
 				return verificationPolicy{identifiers: ids, reqCreatedTS: &falseVal, reqExpiresTS: &falseVal}
@@ -555,7 +555,7 @@ func TestVerificationPolicyAssertMetadata(t *testing.T) {
 				},
 			},
 			exp: func() verificationPolicy {
-				ids, err := toComponentIdentifiers([]string{"@authority", "@method"})
+				ids, err := toComponentIdentifiers([]string{`"@authority"`, `"@method"`})
 				require.NoError(t, err)
 
 				return verificationPolicy{

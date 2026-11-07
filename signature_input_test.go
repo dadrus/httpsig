@@ -804,41 +804,41 @@ func TestSignatureInputHasIdentifier(t *testing.T) {
 		expected   bool
 	}{
 		"no identifiers": {
-			identifier: "@method",
+			identifier: `"@method"`,
 		},
 		"matching identifier": {
-			given:      []string{"@method"},
-			identifier: "@method",
+			given:      []string{`"@method"`},
+			identifier: `"@method"`,
 			expected:   true,
 		},
 		"different identifier name": {
-			given:      []string{"@method"},
-			identifier: "@authority",
+			given:      []string{`"@method"`},
+			identifier: `"@authority"`,
 		},
 		"matching parameter value": {
-			given:      []string{`@query-param;name="foo"`},
-			identifier: `@query-param;name="foo"`,
+			given:      []string{`"@query-param";name="foo"`},
+			identifier: `"@query-param";name="foo"`,
 			expected:   true,
 		},
 		"different parameter value": {
-			given:      []string{`@query-param;name="bar"`},
-			identifier: `@query-param;name="foo"`,
+			given:      []string{`"@query-param";name="bar"`},
+			identifier: `"@query-param";name="foo"`,
 		},
 		"different parameter name": {
-			given:      []string{`x-test;sf`},
-			identifier: `x-test;req`,
+			given:      []string{`"x-test";sf`},
+			identifier: `"x-test";req`,
 		},
 		"additional parameter": {
-			given:      []string{`x-test;sf;req`},
-			identifier: `x-test;sf`,
+			given:      []string{`"x-test";sf;req`},
+			identifier: `"x-test";sf`,
 		},
 		"missing parameter": {
-			given:      []string{`x-test;sf`},
-			identifier: `x-test;sf;req`,
+			given:      []string{`"x-test";sf`},
+			identifier: `"x-test";sf;req`,
 		},
 		"different parameter order": {
-			given:      []string{`x-test;key="foo";req`},
-			identifier: `x-test;req;key="foo"`,
+			given:      []string{`"x-test";key="foo";req`},
+			identifier: `"x-test";req;key="foo"`,
 			expected:   true,
 		},
 	} {

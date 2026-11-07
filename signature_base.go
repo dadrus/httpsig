@@ -3,7 +3,6 @@ package httpsig
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -13,9 +12,8 @@ type serializedComponent struct {
 	value      string
 }
 
-// The entries correspond to input.identifiers by index. Signature parameters are separate.
+// The entries preserve the covered component order. Signature parameters are separate.
 type signatureBase struct {
-	input           *signatureInput
 	entries         []serializedComponent
 	signatureParams string
 }
@@ -31,7 +29,6 @@ func newSignatureBase(msg *Message, si *signatureInput, prepared []string) (sign
 	}
 
 	sigBase := signatureBase{
-		input:           si,
 		entries:         make([]serializedComponent, 0, len(si.identifiers)),
 		signatureParams: marshalledSigParams,
 	}
@@ -114,15 +111,8 @@ func (s signatureBase) marshal() []byte {
 func (s signatureBase) components() map[string]string {
 	result := make(map[string]string, len(s.entries))
 
-	for i, item := range s.entries {
-		name := s.input.identifiers[i].Value.(string) // nolint: forcetypeassert
-
-		// Remove quotes around the component name,
-		// preserving identifier parameters.
-		prefix := `"` + name + `"`
-		key := name + strings.TrimPrefix(item.identifier, prefix)
-
-		result[key] = item.value
+	for _, item := range s.entries {
+		result[item.identifier] = item.value
 	}
 
 	return result

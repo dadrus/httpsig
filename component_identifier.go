@@ -8,27 +8,6 @@ import (
 	"github.com/dunglas/httpsfv"
 )
 
-func quoteIdentifierName(input string) string {
-	// nothing to do if already quoted
-	if strings.HasPrefix(input, `"`) {
-		return input
-	}
-
-	// try to split the structured field
-	parts := strings.Split(input, ";")
-	name, rest := parts[0], parts[1:]
-
-	// always quote the name
-	identifier := "\"" + name + "\""
-
-	if len(rest) == 0 {
-		return identifier
-	}
-
-	// just add the rest
-	return identifier + ";" + strings.Join(rest, ";")
-}
-
 type componentIdentifier struct {
 	httpsfv.Item
 
@@ -39,7 +18,7 @@ func toComponentIdentifiers(identifiers []string) ([]*componentIdentifier, error
 	cis := make([]*componentIdentifier, 0, len(identifiers))
 
 	for _, identifier := range identifiers {
-		item, err := httpsfv.UnmarshalItem([]string{quoteIdentifierName(identifier)})
+		item, err := httpsfv.UnmarshalItem([]string{identifier})
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s: %w", ErrInvalidComponentIdentifier, identifiers, err)
 		}

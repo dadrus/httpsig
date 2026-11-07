@@ -8,24 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQuoteIdentifierName(t *testing.T) {
-	t.Parallel()
-
-	for uc, tc := range map[string]struct {
-		given  string
-		expect string
-	}{
-		"name already quoted":                {given: `"@method";req,key=val`, expect: `"@method";req,key=val`},
-		"name not quoted, without parameter": {given: `@method`, expect: `"@method"`},
-		"name not quoted, with parameter":    {given: `@method;req,key=val`, expect: `"@method";req,key=val`},
-	} {
-		t.Run(uc, func(t *testing.T) {
-			res := quoteIdentifierName(tc.given)
-			assert.Equal(t, tc.expect, res)
-		})
-	}
-}
-
 func TestToComponentIdentifiers(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +16,7 @@ func TestToComponentIdentifiers(t *testing.T) {
 		assert      func(t *testing.T, ci []*componentIdentifier, err error)
 	}{
 		"invalid identifier definition": {
-			identifiers: []string{"foo;#"},
+			identifiers: []string{`"foo";#`},
 			assert: func(t *testing.T, _ []*componentIdentifier, err error) {
 				t.Helper()
 
@@ -42,8 +24,62 @@ func TestToComponentIdentifiers(t *testing.T) {
 				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
 			},
 		},
+		"unquoted derived component": {
+			identifiers: []string{"@method"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"unquoted field name": {
+			identifiers: []string{"content-digest"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"unquoted field name with parameters": {
+			identifiers: []string{"content-digest;req"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"unquoted derived component with parameters": {
+			identifiers: []string{`@query-param;name="Pet"`},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"non-string SF integer": {
+			identifiers: []string{"42"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
+		"non-string SF boolean": {
+			identifiers: []string{"?1"},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrInvalidComponentIdentifier)
+				assert.Nil(t, ci)
+			},
+		},
 		"unknown identifier": {
-			identifiers: []string{"@foo"},
+			identifiers: []string{`"@foo"`},
 			assert: func(t *testing.T, _ []*componentIdentifier, err error) {
 				t.Helper()
 
@@ -52,7 +88,7 @@ func TestToComponentIdentifiers(t *testing.T) {
 			},
 		},
 		"preserving supported parameter types": {
-			identifiers: []string{`x-test;key="abc";sf;req`},
+			identifiers: []string{`"x-test";key="abc";sf;req`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
 				t.Helper()
 
@@ -72,8 +108,25 @@ func TestToComponentIdentifiers(t *testing.T) {
 				assert.Equal(t, true, req)
 			},
 		},
+		"preserving parameter order": {
+			identifiers: []string{`"x-test";sf;req`, `"x-test";req;sf`},
+			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
+				t.Helper()
+
+				require.NoError(t, err)
+				require.Len(t, ci, 2)
+
+				for i, expected := range []string{`"x-test";sf;req`, `"x-test";req;sf`} {
+					actual, marshalErr := httpsfv.Marshal(ci[i].Item)
+					require.NoError(t, marshalErr)
+					assert.Equal(t, expected, actual)
+				}
+
+				assert.True(t, ci[0].equal(ci[1]))
+			},
+		},
 		"valid": {
-			identifiers: []string{"@method;req", "@status", `@query-param;name="Pet"`},
+			identifiers: []string{`"@method";req`, `"@status"`, `"@query-param";name="Pet"`},
 			assert: func(t *testing.T, ci []*componentIdentifier, err error) {
 				t.Helper()
 
@@ -218,25 +271,25 @@ func TestComponentIdentifierEqual(t *testing.T) {
 		equal  bool
 	}{
 		"same identifier with reordered parameters": {
-			first:  `x-test;key="foo";sf`,
-			second: `x-test;sf;key="foo"`,
+			first:  `"x-test";key="foo";sf`,
+			second: `"x-test";sf;key="foo"`,
 			equal:  true,
 		},
 		"different names": {
-			first:  `x-first`,
-			second: `x-second`,
+			first:  `"x-first"`,
+			second: `"x-second"`,
 		},
 		"different parameter names": {
-			first:  `x-test;sf`,
-			second: `x-test;bs`,
+			first:  `"x-test";sf`,
+			second: `"x-test";bs`,
 		},
 		"different parameter counts": {
-			first:  `x-test;req`,
-			second: `x-test`,
+			first:  `"x-test";req`,
+			second: `"x-test"`,
 		},
 		"different parameter values": {
-			first:  `x-test;key="foo"`,
-			second: `x-test;key="bar"`,
+			first:  `"x-test";key="foo"`,
+			second: `"x-test";key="bar"`,
 		},
 	} {
 		t.Run(uc, func(t *testing.T) {
