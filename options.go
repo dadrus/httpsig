@@ -631,20 +631,20 @@ func normalizeParameter(option parameterOption) (parameterOption, error) {
 		return option, fmt.Errorf("%w: %q is a reserved signature parameter", ErrParameter, option.name)
 	}
 
-	switch v := option.value.(type) {
+	switch val := option.value.(type) {
 	case Token:
-		option.value = httpsfv.Token(v)
+		option.value = httpsfv.Token(val)
 	case DisplayString:
-		if !utf8.ValidString(string(v)) {
+		if !utf8.ValidString(string(val)) {
 			return option, fmt.Errorf("%w: invalid UTF-8 in signature parameter %q", ErrParameter, option.name)
 		}
 
-		option.value = httpsfv.DisplayString(v)
+		option.value = httpsfv.DisplayString(val)
 	case time.Time:
 		// RFC 9651 Date values have Unix-second precision.
-		option.value = time.Unix(v.Unix(), 0).UTC()
+		option.value = time.Unix(val.Unix(), 0).UTC()
 	case int:
-		option.value = int64(v)
+		option.value = int64(val)
 	case string, bool, int64, float64, []byte, httpsfv.Token:
 	default:
 		return option, fmt.Errorf("%w: unsupported value type %T for signature parameter %q",
