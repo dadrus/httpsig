@@ -189,8 +189,8 @@ const (
 // SignatureParameters contains all signature parameters transmitted in a
 // Signature-Input entry, including profile-specific extensions. Keys are the
 // parameter names; values are decoded Structured Fields bare items (for
-// example string, Token, int64, float64, bool, or []byte).
-// Display Strings are exposed as ordinary strings.
+// example string, Token, DisplayString, time.Time, int64, float64, bool, or
+// []byte).
 type SignatureParameters map[SignatureParameter]any
 
 // KeyID returns the keyid parameter if present and of the expected type.
@@ -239,6 +239,10 @@ func (p SignatureParameters) Tag() (string, bool) {
 // applications can distinguish token values from quoted Structured Fields
 // strings when validating profile-specific signature parameters.
 type Token string
+
+// DisplayString represents an RFC 9651 Structured Fields Display String.
+// Unlike an ordinary Structured Fields string, it may contain Unicode.
+type DisplayString string
 
 // MessageSigner signs the complete HTTP signature base using an
 // application-provided implementation. The implementation is responsible for
