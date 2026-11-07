@@ -327,20 +327,22 @@ func TestStrictEncodingSerialization(t *testing.T) {
 func TestStructuredFieldSerialization(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	for uc, tc := range map[string]struct {
 		input  []string
 		key    string
 		result []string
 		err    bool
 	}{
-		{input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "a", result: []string{"1"}},
-		{input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "b", result: []string{"2;x=1;y=2"}},
-		{input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "c", result: []string{"(a b c)"}},
-		{input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "d", result: []string{"?1"}},
-		{input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "e", err: true},
-		{input: []string{"(a b c)"}, key: "a", err: true},
+		"integer member":               {input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "a", result: []string{"1"}},
+		"member with parameters":       {input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "b", result: []string{"2;x=1;y=2"}},
+		"inner list member":            {input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "c", result: []string{"(a b c)"}},
+		"boolean member in dictionary": {input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "d", result: []string{"?1"}},
+		"single bare boolean member":   {input: []string{"a"}, key: "a", result: []string{"?1"}},
+		"bare boolean with parameters": {input: []string{"a;x=1"}, key: "a", result: []string{"?1;x=1"}},
+		"missing dictionary member":    {input: []string{"  a=1, b=2;x=1;y=2, c=(a   b    c), d"}, key: "e", err: true},
+		"non-dictionary field":         {input: []string{"(a b c)"}, key: "a", err: true},
 	} {
-		t.Run("key="+tc.key, func(t *testing.T) {
+		t.Run(uc, func(t *testing.T) {
 			params := httpsfv.NewParams()
 			params.Add("key", tc.key)
 

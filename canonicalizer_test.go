@@ -979,7 +979,7 @@ func TestCanonicalizeHeader(t *testing.T) {
 		"header component for request - invalid, serialization error": {
 			identifier:  `"X-Foo-Bar";sf;key="foo"`,
 			message:     &Message{Header: http.Header{"X-Foo-Bar": []string{"baz"}}, IsRequest: true},
-			errContains: "unable to parse",
+			errContains: "serialization error",
 		},
 		"header component for request - valid": {
 			identifier: `"X-Foo-Bar"`,

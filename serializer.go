@@ -111,18 +111,15 @@ type strictSerializer struct {
 	key string
 }
 
-func (s *strictSerializer) serialize(v []string) ([]string, error) {
-	// strict encoding of field
-	parsed, err := s.parse(v)
-	if err != nil {
-		return nil, err
-	}
+func (s *strictSerializer) serialize(values []string) ([]string, error) {
+	var parsed httpsfv.StructuredFieldValue
 
 	if len(s.key) != 0 {
-		dict, ok := parsed.(*httpsfv.Dictionary)
-		if !ok {
-			return nil, fmt.Errorf("%w: unable to parse value as dictionary",
-				errSerialization)
+		// The 'key' parameter requires dictionary parsing, even when the
+		// field value could also be parsed as a list (e.g. a bare boolean member).
+		dict, err := httpsfv.UnmarshalDictionary(values)
+		if err != nil {
+			return nil, fmt.Errorf("%w: unable to parse value as dictionary: %w", errSerialization, err)
 		}
 
 		val, ok := dict.Get(s.key)
@@ -130,12 +127,14 @@ func (s *strictSerializer) serialize(v []string) ([]string, error) {
 			return nil, fmt.Errorf("%w: unable to find key '%s' in structured field", errSerialization, s.key)
 		}
 
-		marshalled, err := httpsfv.Marshal(val)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errSerialization, err)
-		}
+		parsed = val
+	} else {
+		var err error
 
-		return []string{marshalled}, nil
+		parsed, err = s.parse(values)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	marshalled, err := httpsfv.Marshal(parsed)
