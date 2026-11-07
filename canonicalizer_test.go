@@ -304,13 +304,17 @@ func TestNewQueryParamCanonicalizer(t *testing.T) {
 		params map[string]any
 		valid  bool
 	}{
-		"without params":      {},
-		"without name":        {params: map[string]any{"req": true}},
-		"with name":           {params: map[string]any{"name": "foo"}, valid: true},
-		"with name and req":   {params: map[string]any{"name": "foo", "req": true}, valid: true},
-		"with encoded name":   {params: map[string]any{"name": "x%2By"}, valid: true},
-		"with invalid escape": {params: map[string]any{"name": "x%GG"}},
-		"with disallowed sf":  {params: map[string]any{"name": "foo", "sf": true}},
+		"without params":          {},
+		"without name":            {params: map[string]any{"req": true}},
+		"with name":               {params: map[string]any{"name": "foo"}, valid: true},
+		"with name and req":       {params: map[string]any{"name": "foo", "req": true}, valid: true},
+		"with encoded name":       {params: map[string]any{"name": "x%2By"}, valid: true},
+		"with invalid escape":     {params: map[string]any{"name": "x%GG"}},
+		"with literal plus":       {params: map[string]any{"name": "x+y"}},
+		"with lowercase escape":   {params: map[string]any{"name": "x%2by"}},
+		"with escaped unreserved": {params: map[string]any{"name": "f%6Fo"}},
+		"with invalid UTF-8":      {params: map[string]any{"name": "%FF"}},
+		"with disallowed sf":      {params: map[string]any{"name": "foo", "sf": true}},
 	} {
 		t.Run(uc, func(t *testing.T) {
 			var params *httpsfv.Params
@@ -853,11 +857,6 @@ func TestCanonicalizeQueryParam(t *testing.T) {
 			identifier: `"@query-param";name="x%20y"`,
 			message:    &Message{URL: &url.URL{RawQuery: "x+y=ok"}, IsRequest: true},
 			want:       []string{"ok"},
-		},
-		"@query-param for request - literal plus in name is not a space": {
-			identifier: `"@query-param";name="x+y"`,
-			message:    &Message{URL: &url.URL{RawQuery: "x%2By=plus&x+y=space"}, IsRequest: true},
-			want:       []string{"plus"},
 		},
 		"@query-param for request - empty value": {
 			identifier: `"@query-param";name="x"`,

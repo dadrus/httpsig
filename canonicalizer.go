@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -266,6 +267,10 @@ func newQueryParamCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 	decodedName, err := url.PathUnescape(name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid @query-param name %q: %w", ErrInvalidComponentIdentifier, name, err)
+	}
+
+	if !utf8.ValidString(decodedName) || encodeQueryParam(decodedName) != name {
+		return nil, fmt.Errorf("%w: @query-param name %q is not canonically encoded", ErrInvalidComponentIdentifier, name)
 	}
 
 	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
