@@ -22,6 +22,8 @@ type VerifiedSignature struct {
 
 	// Components contains the canonicalized values of the covered HTTP
 	// message components, without the synthetic @signature-params component.
+	// Map keys are serialized Structured Fields String Items (e.g. `"@method"`
+	// or `"content-digest";req`).
 	Components map[string]string
 
 	// Parameters contains the actual transmitted signature parameters,
