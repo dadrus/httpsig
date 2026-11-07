@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dunglas/httpsfv"
 )
@@ -252,13 +253,24 @@ func newQueryParamCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 		return nil, err
 	}
 
-	hasName := false
-	if params != nil {
-		_, hasName = params.Get("name")
+	if params == nil {
+		return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
 	}
 
+	val, hasName := params.Get("name")
 	if !hasName {
 		return nil, fmt.Errorf("%w: @query-param requires a 'name' parameter", ErrInvalidComponentIdentifier)
+	}
+
+	name := val.(string) //nolint: forcetypeassert
+
+	decodedName, err := url.PathUnescape(name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid @query-param name %q: %w", ErrInvalidComponentIdentifier, name, err)
+	}
+
+	if !utf8.ValidString(decodedName) || encodeQueryParam(decodedName) != name {
+		return nil, fmt.Errorf("%w: @query-param name %q is not canonically encoded", ErrInvalidComponentIdentifier, name)
 	}
 
 	return canonicalizerFunc(func(msg *Message, params *httpsfv.Params) ([]string, error) {
@@ -267,20 +279,17 @@ func newQueryParamCanonicalizer(params *httpsfv.Params) (canonicalizer, error) {
 			return nil, err
 		}
 
-		val, _ := params.Get("name")
-		name := val.(string) //nolint: forcetypeassert
-
 		query := msg.queryParams()
-		if !query.Has(name) {
+		if !query.Has(decodedName) {
 			return nil, fmt.Errorf("%w: expected query parameter '%s' not found", ErrCanonicalization, name)
 		}
 
-		unescaped := query[name]
+		unescaped := query[decodedName]
 		if len(unescaped) > 1 {
 			return nil, fmt.Errorf("%w: query parameter '%s' occurs multiple times", ErrCanonicalization, name)
 		}
 
-		return []string{url.PathEscape(unescaped[0])}, nil
+		return []string{encodeQueryParam(unescaped[0])}, nil
 	}), nil
 }
 
@@ -351,4 +360,42 @@ func newHeaderCanonicalizer(header string, params *httpsfv.Params) (canonicalize
 
 		return result, nil
 	}), nil
+}
+
+// encodeQueryParam uses the HTML form percent-encode set with spaces encoded
+// as %20, as in RFC 9421 section 2.2.8's examples.
+func encodeQueryParam(value string) string {
+	const hex = "0123456789ABCDEF"
+
+	for i := 0; i < len(value); i++ {
+		if queryParamUnescaped(value[i]) {
+			continue
+		}
+
+		var encoded strings.Builder
+		encoded.Grow(len(value) + 2) //nolint:mnd
+		encoded.WriteString(value[:i])
+
+		for ; i < len(value); i++ {
+			b := value[i]
+			if queryParamUnescaped(b) {
+				encoded.WriteByte(b)
+
+				continue
+			}
+
+			encoded.WriteByte('%')
+			encoded.WriteByte(hex[b>>4])
+			encoded.WriteByte(hex[b&0x0F])
+		}
+
+		return encoded.String()
+	}
+
+	return value
+}
+
+func queryParamUnescaped(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' ||
+		c == '*' || c == '-' || c == '.' || c == '_'
 }

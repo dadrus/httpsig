@@ -662,6 +662,7 @@ See also [RFC 9421 Security Considerations](https://www.rfc-editor.org/rfc/rfc94
 Following are the known limitations and deviations:
 
 - **HTTP trailers:** The `;tr` component identifier parameter is not supported. `Signature` and `Signature-Input` fields cannot be processed as trailers.
+- **Query parameter parsing:** `@query-param` uses Go's `url.URL.Query()` to parse form parameters. Its handling of malformed percent escapes, raw semicolons, and invalid UTF-8 differs from WHATWG form parsing. For ambiguous or repeated parameters, cover the entire query with `@query` instead. The `@query-param` component uses `%20` for spaces, following the RFC 9421 examples and other HMS implementations.
 
 ### Other Limitations
 

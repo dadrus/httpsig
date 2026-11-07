@@ -95,14 +95,14 @@ func TestParseAcceptSignatureBuilderOutput(t *testing.T) {
 func TestParsedComponentsRoundTripThroughWithComponents(t *testing.T) {
 	t.Parallel()
 
-	const field = `sig=("@status" "content-digest";req "@query-param";name="a;b" "@query-param";name="b\"c" "@query-param";name="d\\e" "x_test");created`
+	const field = `sig=("@status" "content-digest";req "@query-param";name="a%3Bb" "@query-param";name="b%22c" "@query-param";name="d%5Ce" "x_test");created`
 
 	requests, err := ParseAcceptSignature(http.Header{headerAcceptSignature: {field}})
 	require.NoError(t, err)
 	require.Len(t, requests, 1)
 	assert.Equal(t, []string{
-		`"@status"`, `"content-digest";req`, `"@query-param";name="a;b"`,
-		`"@query-param";name="b\"c"`, `"@query-param";name="d\\e"`, `"x_test"`,
+		`"@status"`, `"content-digest";req`, `"@query-param";name="a%3Bb"`,
+		`"@query-param";name="b%22c"`, `"@query-param";name="d%5Ce"`, `"x_test"`,
 	}, requests[0].Components)
 
 	builder, err := NewAcceptSignature(

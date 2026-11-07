@@ -54,6 +54,8 @@ linters:
         - m map[string]int
         - w http.ResponseWriter
         - r *http.Request
+        - c char
+        - b byte
   exclusions:
     generated: lax
     presets:

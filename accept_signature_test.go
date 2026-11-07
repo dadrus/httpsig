@@ -429,7 +429,7 @@ func TestNewSignatureRequest(t *testing.T) {
 	contentDigest.Params.Add("req", true)
 
 	queryParam := httpsfv.NewItem("@query-param")
-	queryParam.Params.Add("name", "a;b")
+	queryParam.Params.Add("name", "a%3Bb")
 
 	params := httpsfv.NewParams()
 	params.Add(string(Created), true)
@@ -456,7 +456,7 @@ func TestNewSignatureRequest(t *testing.T) {
 			},
 			expected: SignatureRequest{
 				Label:      "sig",
-				Components: []string{`"@method"`, `"content-digest";req`, `"@query-param";name="a;b"`},
+				Components: []string{`"@method"`, `"content-digest";req`, `"@query-param";name="a%3Bb"`},
 				KeyID:      "test-key",
 				Algorithm:  Ed25519,
 				Tag:        "app-123",
