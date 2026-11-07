@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.11.0](https://github.com/dadrus/httpsig/compare/v0.10.0...v0.11.0) (2026-11-07)
+
+
+### Features
+
+* Cryptographic agility support ([#187](https://github.com/dadrus/httpsig/issues/187)) ([77420eb](https://github.com/dadrus/httpsig/commit/77420eb76e68e3994dadde009be3d7cb99abf33d))
+* New `WithoutMaxAge` option for signature verification ([#186](https://github.com/dadrus/httpsig/issues/186)) ([7805c90](https://github.com/dadrus/httpsig/commit/7805c90cd7ba5accdc1975fa66759a28fecff19f))
+* Supporting parsing of `Accept-Signature` header ([#176](https://github.com/dadrus/httpsig/issues/176)) ([a0fcb76](https://github.com/dadrus/httpsig/commit/a0fcb76c5a68e1218d4d0d6de3b08d011393f3a5))
+
+
+### Bug Fixes
+
+* `"[@authority](https://github.com/authority)"` canonicalization corrected ([#196](https://github.com/dadrus/httpsig/issues/196)) ([a572b10](https://github.com/dadrus/httpsig/commit/a572b10fd2ae9c723b7dbfbe96f9fa012b7bb583))
+* HTTP field value canonicalization corrected ([#195](https://github.com/dadrus/httpsig/issues/195)) ([b6e9ce3](https://github.com/dadrus/httpsig/commit/b6e9ce3633afdececf1c93225a3c2201593d5880))
+* Inconsistent handling of -1 between global and tag-specific `WithMaxAge` configurations eliminated ([#185](https://github.com/dadrus/httpsig/issues/185)) ([68bfbba](https://github.com/dadrus/httpsig/commit/68bfbba3caaddbbdcea0bfe3803d8f16475fba8f))
+* More compliant component identifier validation according to RFC 9421 ([#192](https://github.com/dadrus/httpsig/issues/192)) ([8ca769e](https://github.com/dadrus/httpsig/commit/8ca769eec7cd78ffed9ba8a07f850b8f19af7f0d))
+* Preserving HTTP field value bytes in bs serialization ([#194](https://github.com/dadrus/httpsig/issues/194)) ([50e1c32](https://github.com/dadrus/httpsig/commit/50e1c3261578e3f29fc1e18d42e62e85cd1ba81e))
+* Preserving structured field component parameter types ([#180](https://github.com/dadrus/httpsig/issues/180)) ([33d307e](https://github.com/dadrus/httpsig/commit/33d307e80c87676f181cd525ed6762ac5b519950))
+* Rejecting negative validity tolerances and eliminate inconsistent handling of -1 between global and tag-specific verifier configurations ([#184](https://github.com/dadrus/httpsig/issues/184)) ([5c43a2d](https://github.com/dadrus/httpsig/commit/5c43a2d88d4a8e54c3c41763062a11af1d62b15c))
+* Validating of HTTP field names in component identifiers according to RFC 9110 ([#191](https://github.com/dadrus/httpsig/issues/191)) ([aa6ddba](https://github.com/dadrus/httpsig/commit/aa6ddba4235784f779a619716656a8c5f092b666))
+
+
+### Documentation
+
+* AGENTS.md added ([#188](https://github.com/dadrus/httpsig/issues/188)) ([1a04722](https://github.com/dadrus/httpsig/commit/1a04722e1e34cd4793e990e02ece08dceeed8ffe))
+* SECURITY.md added ([#189](https://github.com/dadrus/httpsig/issues/189)) ([0fdf94e](https://github.com/dadrus/httpsig/commit/0fdf94ef69e51bce6a60943ed33b5758d656d589))
+
 ## [0.10.0](https://github.com/dadrus/httpsig/compare/v0.9.0...v0.10.0) (2026-11-05)
 
 
