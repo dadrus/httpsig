@@ -830,6 +830,78 @@ func TestWithValidateAllSignatures(t *testing.T) {
 	assert.True(t, v.validateAllSigs)
 }
 
+func TestWithSignatureSelection(t *testing.T) {
+	t.Parallel()
+
+	v := &verifier{}
+
+	err := WithSignatureSelection().applyVerifierOption(v, &verificationPolicy{}, false)
+
+	require.NoError(t, err)
+	assert.True(t, v.signatureSelection)
+	assert.False(t, v.validateAllSigs)
+}
+
+func TestWithLabelForVerify(t *testing.T) {
+	t.Parallel()
+
+	for uc, tc := range map[string]struct {
+		policy verificationPolicy
+		label  string
+		assert func(t *testing.T, err error, policy *verificationPolicy)
+	}{
+		"selects label": {
+			policy: verificationPolicy{labelSelection: true},
+			label:  "sig1",
+			assert: func(t *testing.T, err error, policy *verificationPolicy) {
+				t.Helper()
+
+				require.NoError(t, err)
+				assert.Equal(t, "sig1", policy.selectedLabel)
+			},
+		},
+		"rejects empty label": {
+			policy: verificationPolicy{labelSelection: true},
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "must not be empty")
+			},
+		},
+		"rejects repeated label": {
+			policy: verificationPolicy{labelSelection: true, selectedLabel: "sig1"},
+			label:  "sig1",
+			assert: func(t *testing.T, err error, _ *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "more than once")
+			},
+		},
+		"rejects verifier without signature selection": {
+			label: "sig1",
+			assert: func(t *testing.T, err error, policy *verificationPolicy) {
+				t.Helper()
+
+				require.ErrorIs(t, err, ErrParameter)
+				require.ErrorContains(t, err, "WithSignatureSelection")
+				assert.Empty(t, policy.selectedLabel)
+			},
+		},
+	} {
+		t.Run(uc, func(t *testing.T) {
+			t.Parallel()
+
+			policy := tc.policy
+
+			err := WithLabel(tc.label).applyVerifyOption(&policy)
+
+			tc.assert(t, err, &policy)
+		})
+	}
+}
+
 func TestWithCreatedTimestampForVerifier(t *testing.T) {
 	t.Parallel()
 

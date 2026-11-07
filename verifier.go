@@ -52,11 +52,14 @@ type applicableSignature struct {
 }
 
 // NewVerifier creates a Verifier instance.
-// Without WithValidateAllSignatures, at least one WithRequiredTag is necessary.
+// Signatures must be selected through WithValidateAllSignatures, at least one
+// WithRequiredTag, or WithSignatureSelection. The first two may be combined,
+// while WithSignatureSelection excludes both.
 // By default, created and expires are required and signatures may be at most
 // 30 seconds old. Optional created or expires parameters are still checked
 // when present. Global WithSignatureNegotiation cannot be combined with
-// WithValidateAllSignatures. More specific requirements can be set through opts.
+// WithValidateAllSignatures or WithSignatureSelection. More specific requirements
+// can be set through opts.
 //
 //nolint:cyclop
 func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error) {
@@ -81,7 +84,14 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 		}
 	}
 
-	if !ver.validateAllSigs && len(ver.tagPolicies) == 0 {
+	if ver.signatureSelection {
+		if ver.validateAllSigs || len(ver.tagPolicies) != 0 || globalPolicy.asb != nil {
+			return nil, fmt.Errorf("%w: signature selection cannot be combined with "+
+				"validation of all signatures, required tags, or signature negotiation", ErrVerifierCreation)
+		}
+
+		globalPolicy.labelSelection = true
+	} else if !ver.validateAllSigs && len(ver.tagPolicies) == 0 {
 		return nil, fmt.Errorf("%w: validation of all signatures disabled, but no signature tags specified",
 			ErrVerifierCreation)
 	}
@@ -97,7 +107,7 @@ func NewVerifier(resolver KeyResolver, opts ...VerifierOption) (Verifier, error)
 		}
 	}
 
-	if ver.validateAllSigs {
+	if ver.validateAllSigs || ver.signatureSelection {
 		if err := globalPolicy.prepare(""); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrVerifierCreation, err)
 		}
@@ -130,9 +140,10 @@ func newPayloadVerifier(verificationKey any, alg SignatureAlgorithm) (payloadVer
 }
 
 type verifier struct {
-	keyResolver     KeyResolver
-	tagPolicies     map[string]*verificationPolicy
-	validateAllSigs bool
+	keyResolver        KeyResolver
+	tagPolicies        map[string]*verificationPolicy
+	validateAllSigs    bool
+	signatureSelection bool
 }
 
 func (v *verifier) Verify(msg *Message, opts ...VerifyOption) (VerificationResult, error) {
@@ -141,7 +152,7 @@ func (v *verifier) Verify(msg *Message, opts ...VerifyOption) (VerificationResul
 		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 	}
 
-	sigRefs, err := getSignatureReferences(msg.Header.Values(headerSignatureInput))
+	sigRefs, err := v.signatureReferences(msg, policiesByTag)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrVerificationFailed, err)
 	}
@@ -211,6 +222,37 @@ func (v *verifier) policiesForCall(opts []VerifyOption) (map[string]*verificatio
 	return result, nil
 }
 
+// signatureReferences returns the Signature-Input members to consider. With
+// signature selection, only the selected member is kept, so a member the
+// caller did not select cannot fail the call. Its absence yields an empty result.
+func (v *verifier) signatureReferences(
+	msg *Message,
+	policiesByTag map[string]*verificationPolicy,
+) (*httpsfv.Dictionary, error) {
+	values := msg.Header.Values(headerSignatureInput)
+
+	if !v.signatureSelection {
+		return getSignatureReferences(values)
+	}
+
+	label := policiesByTag[""].selectedLabel
+	if len(label) == 0 {
+		return nil, fmt.Errorf("%w: signature selection requires a label", ErrParameter)
+	}
+
+	inputDict, err := httpsfv.UnmarshalDictionary(values)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
+	}
+
+	selected := httpsfv.NewDictionary()
+	if member, present := inputDict.Get(label); present {
+		selected.Add(label, member)
+	}
+
+	return checkSignatureReferences(selected)
+}
+
 func (v *verifier) applicableSignatures(refs *httpsfv.Dictionary) ([]applicableSignature, error) {
 	result := make([]applicableSignature, 0, len(refs.Names()))
 
@@ -218,7 +260,7 @@ func (v *verifier) applicableSignatures(refs *httpsfv.Dictionary) ([]applicableS
 		member, _ := refs.Get(label)
 
 		list := member.(httpsfv.InnerList) //nolint:forcetypeassert
-		if !v.validateAllSigs {
+		if !v.validateAllSigs && !v.signatureSelection {
 			tag, present := signatureTag(list)
 			if !present {
 				continue
@@ -386,6 +428,10 @@ func getSignatureReferences(values []string) (*httpsfv.Dictionary, error) {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedData, err)
 	}
 
+	return checkSignatureReferences(inputDict)
+}
+
+func checkSignatureReferences(inputDict *httpsfv.Dictionary) (*httpsfv.Dictionary, error) {
 	// Check member types without converting values that require semantic validation.
 	for _, label := range inputDict.Names() {
 		m, _ := inputDict.Get(label)

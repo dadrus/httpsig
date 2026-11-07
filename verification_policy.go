@@ -21,6 +21,8 @@ type verificationPolicy struct {
 	requiredParameters  []SignatureParameter
 	forbiddenParameters []SignatureParameter
 	expectedParameters  []parameterOption
+	labelSelection      bool
+	selectedLabel       string
 }
 
 // clone copies the parameter slices for per-call options. Other fields are

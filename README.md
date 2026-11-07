@@ -129,6 +129,22 @@ verified, err := verifier.Verify(msg)
 // error handling goes here
 ```
 
+If your application picks the signature to check itself, for example because its protocol doesn't use tags, declare `WithSignatureSelection` and name the signature on each call with `WithLabel`. Only that signature is verified and the verifier's requirements apply to it. Other signatures don't affect the result, unless a `Signature-Input` or `Signature` field as a whole isn't valid Structured Fields.
+
+```go
+verifier, err := httpsig.NewVerifier(
+    keyResolver,
+    httpsig.WithSignatureSelection(),
+    httpsig.WithComponents("@method", "@target-uri"),
+)
+// error handling goes here
+
+verified, err := verifier.Verify(msg, httpsig.WithLabel("sig1"))
+// error handling goes here
+```
+
+`WithSignatureSelection` can't be combined with `WithValidateAllSignatures`, `WithRequiredTag`, or `WithSignatureNegotiation`. If the message has no signature with that label, `Verify` returns an error wrapping `NoApplicableSignatureError`. If `WithLabel` is missing, empty, or given more than once, or is used on a verifier without `WithSignatureSelection`, `Verify` returns an error wrapping `ErrParameter`. Labels aren't signed, so a label only chooses what to check and must not be treated as an identity or authorization claim.
+
 Global verifier options act as defaults for required tags. Tag-specific options take precedence (for example, `WithComponents` replaces the global component list), while required, forbidden, and expected signature-parameter constraints are additive. Automatic signature negotiation uses these effective per-tag requirements.
 
 The same APIs also verify incoming requests and sign outgoing responses. Both `Signer.Sign` and `Verifier.Verify` operate on a `Message`, created for the corresponding HTTP direction:
