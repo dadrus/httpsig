@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.12.0](https://github.com/dadrus/httpsig/compare/v0.11.0...v0.12.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* Component identifier representation standardized ([#204](https://github.com/dadrus/httpsig/issues/204))
+
+### Features
+
+* Support for RFC 9651 types in signature parameters ([#201](https://github.com/dadrus/httpsig/issues/201)) ([baf75fb](https://github.com/dadrus/httpsig/commit/baf75fb8cef0fa2b97282c5f65620f693003e5d2))
+
+
+### Code Refactorings
+
+* Component identifier representation standardized ([#204](https://github.com/dadrus/httpsig/issues/204)) ([6e68062](https://github.com/dadrus/httpsig/commit/6e68062a8cc29c557b1f11bf6cc2e8d61efdb577))
+
+
+### Bug Fixes
+
+* `[@query-param](https://github.com/query-param)` canonicalization corrected according to RFC 9421. ([#198](https://github.com/dadrus/httpsig/issues/198)) ([ed3e595](https://github.com/dadrus/httpsig/commit/ed3e5950a163bc4b6569617d2dc4bf471420b6e3))
+* Parsing dictionary fields directly for key components ([#200](https://github.com/dadrus/httpsig/issues/200)) ([8c7ee2d](https://github.com/dadrus/httpsig/commit/8c7ee2d536821357ad4239a51e4828c6939d2cd5))
+
 ## [0.11.0](https://github.com/dadrus/httpsig/compare/v0.10.0...v0.11.0) (2026-11-07)
 
 
